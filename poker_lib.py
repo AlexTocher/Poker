@@ -48,11 +48,11 @@ class Game:
         winning_idx = card_order.index(sorted(card_order, reverse = True)[0])   
         players[winning_idx].is_my_go = True
 
-        hdr = 'High Card is:' + players[winning_idx].hand[0].name  + '\nDrawn by:\n'
+        hdr = 'High Card is: ' + players[winning_idx].hand[0].name  + '\nDrawn by:\n'
 
         # If visualizer is available, show the result immediately
         if self.visualizer:
-            self.visualizer.addstrs([(p.y - 4, p.x, hdr + p.player_info(show = True)) if i == winning_idx else \
+            self.visualizer.addstrs([(p.y - 4, p.x, hdr + p.player_info(show = True, height = 14)) if i == winning_idx else \
                                     (p.y, p.x, p.player_info(show = True)) for i, p in enumerate(players)], BETTING_DELAY * 4 )
                
         self.players = players[winning_idx - 1:] + players[:winning_idx - 1] # reorder players to start with dealer
@@ -246,7 +246,8 @@ class Game:
                     else: 
                         self.visualizer.addstrs([(pl.y, pl.x, pl.player_info(show = True if not pl.folded else True)) for  pl in self.players])
                         self.visualizer.addstr(p.y, p.x, p.player_info(no_cards = True))
-                        self.visualizer.addstr(self.table.y + 2, self.table.x, '\n'.join(self.winner_info(p).split('\n')[:-1]) + '\n' + ftr, SHOW_HANDS_DELAY)
+                        lines = self.winner_info(p).split('\n')
+                        self.visualizer.addstr(self.table.y + 2, self.table.x, '\n'.join(lines[:-2] + [ftr + lines[-2][4 + 5 * CARD_WIDTH:]] + [lines[-1]]) , SHOW_HANDS_DELAY)
                 remaining_pot_amount -= pot.amount
             else:
                 if not self.visualizer: print(f"Pot {i+1} (£{pot.amount:.2f}) had no eligible winners and remains unclaimed.")
@@ -601,7 +602,7 @@ class Player:
         self.folded = True
         return out
     
-    def player_info(self, betting_str = '', show = False, no_cards = False):
+    def player_info(self, betting_str = '', show = False, no_cards = False, height = 12):
         hdr = self.name + '\n'
         if self.dealer: hdr += 'Dealer'
         elif self.sb: hdr += 'Small Blind'
@@ -609,7 +610,7 @@ class Player:
         body = ' ' * PLAYER_WIDTH
         if not no_cards: body = combine_cards(self.hand, overlap = (1,0) ,reverse = (not show, 0))
         pad = '\n' + ' ' * PLAYER_WIDTH
-        while len(body.split('\n')) < 12:
+        while len(body.split('\n')) < height :
             body += pad
 
         ftr = betting_str.ljust(PLAYER_WIDTH * 2) + '\n' + f'Stack: £{self.stack:.2f}'.ljust(PLAYER_WIDTH) +'\n' +  f'Stake: £{self.total_contribution:.2f}'.ljust(PLAYER_WIDTH)\

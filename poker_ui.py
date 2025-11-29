@@ -293,7 +293,7 @@ class Visualizer:
         check_overwrite = lambda x : math.cos(omega * (x - x_dim//2)/x_dim) > 0
         f = lambda x : (m * (x - x_dim//2)**2 + offset)* math.sin(omega * (x - x_dim//2)/x_dim) + centre[1] #
         n_cards = (y_dim + x_dim)//8
-        overlap_num = 30
+        overlap_num = n_cards//2
         # multiply the decks so there is at least 2 * (1 + 2 * overalap_num) * n_cards in each
         n_decks = 2 * (n_cards + 2 * overlap_num)//52 + 1
         deck1.cards, deck2.cards = deck1.cards * n_decks, deck2.cards * n_decks
