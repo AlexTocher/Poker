@@ -325,12 +325,12 @@ class Visualizer:
 
         title_card = title_ascii()
         self.addstr(centre[1]-len(title_card.split('\n'))//2 - 1 , centre[0]-len(title_card.split('\n')[0])//2 - 1, title_card , 0.5, ignore_spaces=True )
-        self.addstr(1 , centre[0] - TITLE_WIDTH//2, TITLE_ART, 0.5,  ignore_spaces=True)
+        self.addstr(MARGIN_Y , centre[0] - TITLE_WIDTH//2, TITLE_ART, 0.5,  ignore_spaces=True)
         self.addstr(round(y_dim * 3/4) , centre[0] - AUTHOR_WIDTH//2, AUTHOR_ART, ignore_spaces=True)
 
                 # --- KEY PRESS WAITING LOGIC ---
         wait_msg = "PRESS ANY KEY TO START"
-        self.stdscr.addstr(y_dim - 4, centre[0] - len(wait_msg)//2, wait_msg, curses.A_BLINK)
+        self.stdscr.addstr(round(y_dim * 3/4) + 6, centre[0] - len(wait_msg)//2, wait_msg, curses.A_BLINK)
         
         # 1. Temporarily enable blocking mode
         self.stdscr.nodelay(False)

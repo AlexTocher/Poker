@@ -38,7 +38,7 @@ class Game:
         time.sleep(1)
         self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = 0.1)
         # self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
-        time.sleep(5)
+        time.sleep(2)
         self.reset(cycle = False)
 
         self.deck.shuffle()
@@ -110,13 +110,14 @@ class Game:
         self.visualizer.addstrs([(p.y, p.x, p.player_info()) for p in self.players])
 
     def get_positions(self):
-        global PLAYER_WIDTH, PLAYER_START_ROW 
+        global PLAYER_WIDTH, PLAYER_START_ROW, BETTING_ROW
         self.deck.y, self.deck.x = MARGIN_Y, MARGIN_X
         self.table.y, self.table.x = max(self.visualizer.center[1]//2, MARGIN_Y + TITLE_HEIGHT + 2), self.visualizer.center[0] - COMMUNITY_WIDTH//2
         self.table.poty, self.table.potx = MARGIN_Y,  self.visualizer.max_x - MARGIN_X - POT_WIDTH,
         self.table.bety, self.table.betx = self.table.poty + (self.visualizer.max_y - 2 * MARGIN_Y - FOOTER_HEIGHT)//2,  self.table.potx
         PLAYER_WIDTH = (self.table.potx - MARGIN_X)//len(self.players)
         PLAYER_START_ROW = self.visualizer.max_y - PLAYER_HEIGHT - MARGIN_Y
+        BETTING_ROW = PLAYER_START_ROW + 12
         for p in self.players:
             p.y, p.x = PLAYER_START_ROW, MARGIN_X + PLAYER_WIDTH * p.idx
 
