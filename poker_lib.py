@@ -1,12 +1,15 @@
 import random
 import sys
+import traceback
 from poker_ui import *
 from poker_hands import *
 
 slow = True
-if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.25, 0.5, 1
+if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 1
 else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.01, 0.01, 0.01
 
+CURSES_ERROR_TRACEBACK = None 
+EXIT_MSG = 'Press shift + Q to exit'
 
 class Game:
     def __init__(self, players, buyin, sb, stdscr = None):
@@ -16,6 +19,7 @@ class Game:
         self.n_rounds = 0
         self.table = Table(len(players)) # class to store info about what's on the table
         self.visualizer =  None
+        self.running = True # NEW: State variable for controlling the main game loop
 
         if stdscr:
             # Initialize the visualizer if stdscr is provided
@@ -26,8 +30,17 @@ class Game:
 
         # decide on order of players by drawing a card, highest card goes first
      
-        self.deck = DeckOfCards()
-        self.starting_animation()
+        self.deck = DeckOfCards(back_color=MAGENTA)
+        if self.visualizer: self.visualizer.starting_animation(deck1 = DeckOfCards( back_color=MAGENTA), 
+                                                               deck2 = DeckOfCards( back_color=BLUE) )
+            
+        self.redraw()
+        time.sleep(1)
+        self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = 0.1)
+        # self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
+        time.sleep(5)
+        self.reset(cycle = False)
+
         self.deck.shuffle()
         self.deck.cut()
         self.deck.deal(players, 1, visualizer=self.visualizer)
@@ -35,28 +48,16 @@ class Game:
         winning_idx = card_order.index(sorted(card_order, reverse = True)[0])   
         players[winning_idx].is_my_go = True
 
-        hdr = 'High Card is:\n' + players[winning_idx].hand[0].name  + '\n\nDrawn by:\n'
+        hdr = 'High Card is:' + players[winning_idx].hand[0].name  + '\nDrawn by:\n'
 
         # If visualizer is available, show the result immediately
         if self.visualizer:
-            self.visualizer.addstrs([(p.y - 8, p.x, hdr + p.player_info(show = True)) if i == winning_idx else \
-                                    (p.y, p.x, p.player_info(show = True)) for i, p in enumerate(players)])
-
+            self.visualizer.addstrs([(p.y - 4, p.x, hdr + p.player_info(show = True)) if i == winning_idx else \
+                                    (p.y, p.x, p.player_info(show = True)) for i, p in enumerate(players)], BETTING_DELAY * 4 )
                
         self.players = players[winning_idx - 1:] + players[:winning_idx - 1] # reorder players to start with dealer
         self.reset() 
-        if self.visualizer:
-            self.visualizer.clear_area(x1 = 0, x2 = MARGIN_X + len(self.players) * PLAYER_WIDTH, y1 = PLAYER_START_ROW - 8, y2 = PLAYER_START_ROW + 32)
-            self.visualizer.addstrs([(p.y, p.x, p.player_info(show = True)) for p in self.players])
 
-    def starting_animation(self):
-        if self.visualizer: 
-            self.redraw()
-            self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = 1)
-            self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
-            time.sleep(5)
-            self.reset(cycle = False)
-        else: return
 
     def end_game(self):
         if self.visualizer: 
@@ -74,16 +75,50 @@ class Game:
     def __str__(self):
         return f"Poker Game (Blinds: £{self.sb:.2f}/£{self.bb:.2f}) with {len(self.players)} players."
     
+    def _check_for_quit(self):
+        """
+        Checks for 'Q' keypress to terminate the game.
+        This must be called frequently during the game loop.
+        """
+        if self.visualizer:
+            # Use the non-blocking input method
+            key = self.visualizer.get_input()
+            # Check for 'q' or 'Q' (curses returns integer key codes)
+            if key in [ord('Q')]:
+                self.running = False
+                if self.visualizer:
+                    # Optional: Display a quick message before exiting
+                    self.visualizer.addstr(2, 2, "Quitting game...             ", 1)
+                return True
+        return False
+        
+    
     def redraw(self):
         if not self.visualizer: return 
         time.sleep(BETTING_DELAY)
-        self.visualizer.clear_area(0, 0, self.visualizer.max_y, self.visualizer.max_x)
-        self.visualizer.addstr(MARGIN_Y, self.table.x - (1 + CARD_WIDTH), 'POKER'.center(6 + 7 * CARD_WIDTH, '-'))
+
+        self.visualizer.get_screen_dimensions()
+        self.visualizer.clear_area(MARGIN_Y, MARGIN_X, self.visualizer.max_y, self.visualizer.max_x)
+        self.get_positions()
+
+        self.visualizer.addstr(0, self.visualizer.max_x - MARGIN_X - len(EXIT_MSG),  EXIT_MSG )
+        self.visualizer.addstr(MARGIN_Y, self.visualizer.center[0] - TITLE_WIDTH//2, TITLE_ART)
         self.visualizer.addstr(self.deck.y, self.deck.x, self.deck.deck_info())
-        self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info())
+        self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info())
         self.visualizer.addstr(self.table.y, self.table.x, self.table.table_info())
         self.visualizer.addstr(self.table.poty, self.table.potx, self.table.pot_info())
         self.visualizer.addstrs([(p.y, p.x, p.player_info()) for p in self.players])
+
+    def get_positions(self):
+        global PLAYER_WIDTH, PLAYER_START_ROW 
+        self.deck.y, self.deck.x = MARGIN_Y, MARGIN_X
+        self.table.y, self.table.x = max(self.visualizer.center[1]//2, MARGIN_Y + TITLE_HEIGHT + 2), self.visualizer.center[0] - COMMUNITY_WIDTH//2
+        self.table.poty, self.table.potx = MARGIN_Y,  self.visualizer.max_x - MARGIN_X - POT_WIDTH,
+        self.table.bety, self.table.betx = self.table.poty + (self.visualizer.max_y - 2 * MARGIN_Y - FOOTER_HEIGHT)//2,  self.table.potx
+        PLAYER_WIDTH = (self.table.potx - MARGIN_X)//len(self.players)
+        PLAYER_START_ROW = self.visualizer.max_y - PLAYER_HEIGHT - MARGIN_Y
+        for p in self.players:
+            p.y, p.x = PLAYER_START_ROW, MARGIN_X + PLAYER_WIDTH * p.idx
 
 
     def reset(self, raise_blinds = False, cycle = True):
@@ -205,9 +240,7 @@ class Game:
                 winnings = pot.amount / n_winners
                 for p in winners_of_pot:
                     p.stack += winnings
-                    ftr = f"{p.name} wins £{winnings:.2f}".ljust(5 * CARD_WIDTH + 4, ' ') + \
-                            f"\nfrom Pot {i+1} (£{pot.cap:.2f} Cap)".ljust(5 * CARD_WIDTH + 4, ' ') + \
-                            f"\nwith {p.hand_name}".ljust(5 * CARD_WIDTH + 4, ' ')
+                    ftr = f"{p.name} wins £{winnings:.2f} from Pot {i+1}".ljust(5 * CARD_WIDTH + 4, ' ')
                     if not self.visualizer: 
                         print(ftr)
                     else: 
@@ -239,22 +272,22 @@ class Game:
         assert(abs(remaining_pot_amount) < 0.01) # Check for zero remaining money
 
     def winner_info(self, player):
-        hdr = 'BEST HAND'.center(5 * CARD_WIDTH + 4, ' ') + '\n'
+        hdr = (player.name + ' - ' + player.hand_name).ljust(5 * CARD_WIDTH + 4, ' ')
         body = combine_cards(player.best_hand, discarded_cards=player.discarded, overlap=(0,1))
         pad = '\n' + ' ' * (4 + 5 * CARD_WIDTH)
         while len(body.split('\n')) < 12:
             body += pad
         
-        ftr = (player.name + ' - ' + player.hand_name).ljust(5 * CARD_WIDTH + 4, ' ')
-        return hdr + '\n' + body + '\n' + ftr
+        
+        return hdr + '\n\n' + body 
 
         
     def betting_info(self): 
         hdr = 'BETTING'.center(BETTING_WIDTH, '-')
         body = ''
         if sum([p.total_contribution for p in self.players]) != 0:
-            body = f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(BETTING_WIDTH) + '\n\n'
-            for p in self.players:
+            hdr += '\n\n' + f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(BETTING_WIDTH)
+            for p in sorted(self.players, key = lambda p : p.idx):
                 if p.is_out: continue
                 body += f'{p.name}:'.ljust(12) + f' £{p.total_contribution:.2f}' 
                 if p.is_all_in: body += ' all-in'
@@ -265,6 +298,8 @@ class Game:
             body += pad
     
         return hdr + '\n\n' + body 
+    
+
     # --- NEW CRUCIAL SIDE POT LOGIC METHOD ---
     def distribute_chips_to_pots(self):
         """
@@ -334,29 +369,34 @@ class Game:
         
         # 1. INITIALIZE BETTING (Blinds)
         if self.table.total_pot_amount == 0: # Pre-Flop
-            hdr = self.players[0].name +  f' is the dealer\n'
+            hdr = self.players[0].name +  f' is the dealer'
             if self.visualizer:
-                self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW - 1, self.visualizer.max_x)
-                self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info())
-                self.visualizer.addstrs([(p.y, p.x, p.player_info()) if i != 0 else (p.y - 3, p.x, hdr + '\n\n' + p.player_info()) for i, p in enumerate(self.players)], BETTING_DELAY)
+                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)   
+                self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 0 ])
+                self.visualizer.addstr(self.players[0].y, self.players[0].x,  self.players[0].player_info(hdr))
+                self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
             else: print(hdr)
 
             # SB posts (Player 1)
-            hdr = self.players[1].name + f' is the small blind\n'
+            hdr = self.players[1].name + f' is the small blind'
             self.players[1].raise_bet(self.sb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW - 1, self.visualizer.max_x)
-                self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info())
-                self.visualizer.addstrs([(p.y, p.x, p.player_info()) if i != 1 else (p.y - 3, p.x, hdr + '\n\n' + p.player_info()) for i, p in enumerate(self.players)], BETTING_DELAY)
+                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 1 ])
+                self.visualizer.addstr(self.players[1].y, self.players[1].x,  self.players[1].player_info(hdr))
+                self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
+
             else: print(hdr)
             
             # BB posts (Player 2)
-            hdr = self.players[2].name + f' is the big blind\n'
+            hdr = self.players[2].name + f' is the big blind'
             self.players[2].raise_bet(self.bb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW - 1, self.visualizer.max_x)
-                self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info())
-                self.visualizer.addstrs([(p.y, p.x, p.player_info()) if i != 2 else (p.y - 3, p.x, hdr + '\n\n' + p.player_info()) for i, p in enumerate(self.players)], BETTING_DELAY)
+                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 2 ])
+                self.visualizer.addstr(self.players[2].y, self.players[2].x,  self.players[2].player_info(hdr))
+                self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
+
             else: print(hdr)
 
             for pl in self.players: pl.last_raised = False 
@@ -404,17 +444,19 @@ class Game:
                 player_obj.last_raised = True
                 
                 if self.visualizer:
-                    self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW -1, self.visualizer.max_x)
-                    self.visualizer.addstrs([(p.y, p.x, p.player_info()) if i != idx % len(self.players) else (p.y - 3, p.x, hdr + '\n\n' + p.player_info()) for i, p in enumerate(self.players)], 0)
-                    self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info(), BETTING_DELAY)
+                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
+                    self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
+                    self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
                 else: print(f"{player_obj.name} raised. New bet to call: £{self.minimum_bet:.2f}")
             else:
                 # Player called or checked
                 all_called_checked += 1 
                 if self.visualizer: 
-                    self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW -1, self.visualizer.max_x)
-                    self.visualizer.addstrs([(p.y, p.x, p.player_info()) if i != idx % len(self.players) else (p.y - 3, p.x, hdr + '\n\n' + p.player_info()) for i, p in enumerate(self.players)], 0)
-                    self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info(), BETTING_DELAY)
+                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
+                    self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
+                    self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
 
             idx += 1
                 
@@ -426,9 +468,9 @@ class Game:
             for i, pot in enumerate(self.table.pots):
                 print(f"Pot {i+1}: {pot}")
         else:
-            self.visualizer.clear_area(PLAYER_START_ROW - 3, 0, PLAYER_START_ROW -1, self.visualizer.max_x)
+            self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
             self.visualizer.addstr(self.table.poty, self.table.potx, self.table.pot_info())
-            self.visualizer.addstr(self.table.poty, self.table.potx + POT_WIDTH + MARGIN_X, self.betting_info(), BETTING_DELAY)
+            self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info(), BETTING_DELAY)
 
 
 
@@ -438,18 +480,23 @@ class Game:
     def play(self, max_rounds = 5):
 
         n = 0
-        while self.n_rounds < max_rounds:
+        while self.running and self.n_rounds < max_rounds:
             if len([p for p in self.players if not p.is_out]) < 3: 
+                self.running = False # End game if not enough players
                 self.end_game()
                 return
             self.deal()
             self.round_of_betting()
+            if self._check_for_quit(): break
             self.flop()
             self.round_of_betting()
+            if self._check_for_quit(): break
             self.turn()
             self.round_of_betting()
+            if self._check_for_quit(): break
             self.river()
             self.round_of_betting()
+            if self._check_for_quit(): break
             self.show_hands()
             n += 1
             if n%len(self.players) == 0:
@@ -457,6 +504,7 @@ class Game:
                 self.n_rounds += 1
             else:
                 self.reset()
+            if self._check_for_quit(): break # Exit the loop if Q was pressed here too
 
 class Player:
     def __init__(self, idx, name=""):
@@ -475,6 +523,7 @@ class Player:
         self.is_out = False
         self.last_raised = False
 
+        self.idx = idx
         self.x = MARGIN_X + idx * PLAYER_WIDTH
         self.y = PLAYER_START_ROW
 
@@ -505,11 +554,11 @@ class Player:
         bet_amount = min(bet_required, self.stack)
         
         if bet_amount <= 0: # Check
-            out_str = self.name + ' checks' + '\n'
+            out_str = self.name + ' checks' 
             if verbose: print( out_str)
             return 0.0, out_str
         
-        out_str = self.name + ' calls' + '\n' if bet_amount < self.stack or self.stake == 0 else self.name + f' calls\n(all in) £{bet_amount:.2f}'
+        out_str = self.name + ' calls'  if bet_amount < self.stack or self.stake == 0 else self.name + f' calls (all in) £{bet_amount:.2f}'
 
         if verbose: 
             print( out_str)
@@ -534,10 +583,10 @@ class Player:
         if total_bet_amount >= self.stack:
             bet_amount = self.stack
             self.is_all_in = True
-            out_str = self.name + f' goes all in\n£{bet_amount:.2f}'
+            out_str = self.name + f' goes all in £{bet_amount:.2f}'
         else:
             bet_amount = total_bet_amount
-            out_str = self.name + f' raises\n£{amount:.2f} (Total bet: £{bet_amount:.2f})'
+            out_str = self.name + f' raises £{amount:.2f} (Total bet: £{bet_amount:.2f})'
         if verbose: print(out_str )
 
         self.stack -= bet_amount
@@ -552,7 +601,7 @@ class Player:
         self.folded = True
         return out
     
-    def player_info(self, show = False, no_cards = False):
+    def player_info(self, betting_str = '', show = False, no_cards = False):
         hdr = self.name + '\n'
         if self.dealer: hdr += 'Dealer'
         elif self.sb: hdr += 'Small Blind'
@@ -562,9 +611,10 @@ class Player:
         pad = '\n' + ' ' * PLAYER_WIDTH
         while len(body.split('\n')) < 12:
             body += pad
-        ftr = f'Stack: £{self.stack:.2f}'.ljust(PLAYER_WIDTH) + f'\nStake: £{self.total_contribution:.2f}'.ljust(PLAYER_WIDTH)\
+
+        ftr = betting_str.ljust(PLAYER_WIDTH * 2) + '\n' + f'Stack: £{self.stack:.2f}'.ljust(PLAYER_WIDTH) +'\n' +  f'Stake: £{self.total_contribution:.2f}'.ljust(PLAYER_WIDTH)\
               if not self.is_out else 'Out'.ljust(PLAYER_WIDTH) + '\n'.ljust(PLAYER_WIDTH)
-        return hdr + '\n' + body + '\n' + ftr + 8 * pad
+        return hdr + '\n' + body + '\n' + ftr + 3 * pad
 
 
 
@@ -606,6 +656,8 @@ class Table:
         self.y = COMMUNITY_Y
         self.potx = COMMUNITY_X + 6 + 7 * CARD_WIDTH + MARGIN_X
         self.poty = POT_Y
+        self.betx = self.potx
+        self.bety = POT_Y + 20
         
     @property
     def total_pot_amount(self) -> float:
@@ -633,7 +685,7 @@ class Table:
             for i, pot in enumerate(self.pots):
                 body += '\n\n' + f"Pot {i+1}: {pot}"
         pad = '\n' + ' ' * POT_WIDTH
-        while len((hdr + body).split('\n')) < PLAYER_START_ROW - MARGIN_Y:
+        while len((hdr + body).split('\n')) < self.bety - self.poty :
             body += pad
     
         return hdr + body 
@@ -648,7 +700,7 @@ class Table:
 
 
 class Card:
-    def __init__(self, suit, rank):
+    def __init__(self, suit, rank, back_color = RED):
         self.suit = suit
         self.rank = rank
         if   rank == 1:  name = 'Ace of '  
@@ -659,7 +711,7 @@ class Card:
         name = name + suit
         self.name = name      
         self.front = card_ascii(rank, suit)
-        self.back = card_ascii(rank, suit, back = True)
+        self.back = card_ascii(rank, suit, back = True, back_color=back_color)
 
     def __repr__(self):
         return f"Card('{self.suit}', {self.rank})"
@@ -669,14 +721,15 @@ class Card:
 
 
 class DeckOfCards:
-    def __init__(self, n_decks = 1):
+    def __init__(self, n_decks = 1, back_color = RED):
         self.cards = []
         self.discard = []
         self.x = DECK_X
         self.y = DECK_Y
-        for suit in SUITS:
-            for rank in RANKS:
-                self.cards += [Card(suit, rank)] * n_decks
+        for i in range(n_decks):
+            for suit in SUITS:
+                for rank in RANKS:
+                    self.cards += [Card(suit, rank, back_color=back_color)]
 
     def shuffle(self):
         random.shuffle(self.cards)
@@ -722,9 +775,10 @@ class DeckOfCards:
             
 
     def deck_info(self):
-        hdr = f'Deck: {len(self.cards):d}'.ljust(3 + 2 * CARD_WIDTH) + f'Discard: {len(self.discard):d}' + '\n'
+        hdr = 'DECK'.center(4 + 3 * CARD_WIDTH, '-') +'\n\n'
+        hdr += f'Deck: {len(self.cards):d}'.ljust(3 + 2 * CARD_WIDTH) + f'Discard: {len(self.discard):d}' + '\n'
         body = combine_cards(self.cards[:2], discarded_cards=self.discard[:2] ,overlap = (1,1) ,reverse = (1,1))
-        pad = '\n' + ' ' * (2 + 3 * CARD_WIDTH)
+        pad = '\n' + ' ' * (4 + 3 * CARD_WIDTH)
         while len(body.split('\n')) < 11:
             body += pad
         return hdr + '\n' + body 
@@ -744,42 +798,75 @@ class DeckOfCards:
         assert(len(self.cards)%52 == 0)
 
 
-# if __name__ == '__main__':
-#     n_players = 5
-#     players = [Player(name = f'Player #{i+1}') for i in range(n_players)]
-#     game = Game(players, 100, 2)
-#     game.play()
-
 def main_tui(stdscr, n_players = 5, buyin = 100, sb = 2):
     """
-    The Curses entry point that performs setup and calls the Game constructor, 
-    passing stdscr directly.
+    The Curses entry point, with an internal error capture.
     """
-   
-    # 1. Initialize Game, passing stdscr for immediate visualization
+    global CURSES_ERROR_TRACEBACK # MUST be at the top
+    
+    # 1. Initialize Game
     players = [Player(i, name = f'Player #{i+1}') for i in range(n_players)]
-    game = Game(players, buyin, sb, stdscr=stdscr)
-    game.play(max_rounds =  50)
-
+    
+    # --- CRITICAL TRY/EXCEPT BLOCK INSIDE CURSES ---
+    try:
+        game = Game(players, buyin, sb, stdscr=stdscr)
+        
+        # 2. Execute the game logic
+        game.play(max_rounds = 50)
+        
+    except Exception as e:
+        # 3. Capture the full traceback details (file, line number, etc.)
+        exc_info = sys.exc_info()
+        tb_str = traceback.format_exception(*exc_info)
+        
+        # 4. Store the captured traceback in the global variable
+        CURSES_ERROR_TRACEBACK = "".join(tb_str)
+        
+        # 5. Re-raise the exception. This is essential to force curses.wrapper() 
+        #    to immediately clean up and restore the terminal state.
+        raise
+        
 
 def poker_tui(**kwargs):
     """Wrapper function to initialize and terminate curses safely."""
-
-    try:
-        # Check if the terminal supports curses
-        if not sys.stdout.isatty():
-             print("Error: Not running in a proper terminal environment for curses.")
-             return
-             
-        # Curses wrapper calls main_tui(stdscr)
-        curses.wrapper(main_tui, **kwargs)
-        
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        # Curses cleanup is handled by curses.wrapper() but a manual endwin is sometimes needed
-        # if the exception happens very early.
+    global CURSES_ERROR_TRACEBACK # MUST be at the top
+    
+    # We remove the try/except from here and move it to the caller
+    # to simplify the internal logic.
+    
+    if not sys.stdout.isatty():
+         print("Error: Not running in a proper terminal environment for curses.")
+         return
+         
+    # Curses wrapper calls main_tui(stdscr)
+    curses.wrapper(main_tui, **kwargs)
 
 
 if __name__ == '__main__':
-    # Start the application, which handles initialization and game creation
-    poker_tui(n_players = 8, buyin = 100)
+    # --- FINAL OUTER TRY/EXCEPT BLOCK (CRITICAL FOR PRE-CURSES ERRORS) ---
+    try:
+        # Start the application, which handles initialization and game creation
+        poker_tui(n_players = 8, buyin = 100)
+    
+    except Exception as e:
+        # This catches errors that occur either:
+        # 1. Before poker_tui is called (unlikely).
+        # 2. During the setup phase inside poker_tui (before curses.wrapper).
+        # 3. An exception re-raised from main_tui (after curses cleanup).
+        
+        # 6. Check if a traceback was captured during the curses phase
+        if CURSES_ERROR_TRACEBACK:
+            # 7. Print the detailed error message clearly outside of curses.
+            print("\n--- DETAILED TRACEBACK from Curses Execution ---")
+            print(CURSES_ERROR_TRACEBACK, file=sys.stderr)
+            print("-------------------------------------------------")
+        else:
+            # 8. Print the detailed error for errors occurring outside of curses.
+            print("\n--- DETAILED TRACEBACK from Pre-Curses Execution ---")
+            # This captures the traceback *at the point of the error* in the outer code
+            traceback.print_exc(file=sys.stderr)
+            print("--------------------------------------------------")
+            
+    finally:
+        # Cleanup the global variable
+        CURSES_ERROR_TRACEBACK = None

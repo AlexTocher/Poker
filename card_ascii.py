@@ -4,7 +4,14 @@ import re
 CARD_WIDTH  = 11
 CARD_HEIGHT = 9
 
-def card_ascii(rank, suit: str, back = False) -> str:
+# Define color for hearts and diamonds
+RED = '\033[91m' # ANSI escape code for red
+BLACK = '\033[90m' # ANSI escape code for black (dark grey)
+BLUE = '\033[94m' # ANSI escape code to blue color
+MAGENTA = '\033[95m' # ANSI escape code to blue color
+END = '\033[0m' # ANSI escape code to reset color
+
+def card_ascii(rank, suit: str, back = False, back_color=RED) -> str:
     """
     Generates ASCII art representation for a single card.
     
@@ -135,19 +142,13 @@ def card_ascii(rank, suit: str, back = False) -> str:
                     out[i] += top[i][j]
         return out
 
-
-    # Define color for hearts and diamonds
-    RED = '\033[91m' # ANSI escape code for red
-    BLACK = '\033[90m' # ANSI escape code for black (dark grey)
-    END = '\033[0m' # ANSI escape code to reset color
-
     suit_names = SUITS
     suit_symbols = ['♣', '♦', '♥','♠' ]
 
     suit = suit_symbols[suit_names.index(suit)]
 
     if back == True:
-        S, H, D, C = BLACK + '♠' + END, RED + '♥' + END, RED + '♦' + END, BLACK + '♣' + END
+        S, H, D, C = BLACK + '♠' + END, back_color + '♥' + END, back_color + '♦' + END, BLACK + '♣' + END
         line = [f"{S}",f"{H}",f"{C}",f"{D}"] * 9 
         return "\n".join(["╔═════════╗"] + \
                          ["║" + f"".join(line[start: start + 9]) + "║" for start in range(0, 7) ] + \
@@ -330,3 +331,49 @@ def combine_cards(cards: list[str], n_cards_per_line: int = 13,  discarded_cards
              final_output_lines.append("")
 
     return "\n".join(final_output_lines)
+
+
+def title_ascii():
+    inner_lines = [
+    " ▞▚             ▟▙ ", # Line 0: Top rank and suit
+    " ▛▜     ▗█▖    ▝▜▛▘", # Line 1: Top part of the spade
+    "       ▗███▖       ", # Line 2
+    "      ▗█▛ ▜█▖      ", # Line 3
+    "     ▗█▛   ▜█▖     ", # Line 3
+    "    ▗█▛ ▗█▖ ▜█▖    ", # Line 3
+    "   ▗█▛ ▗███▖ ▜█▖   ", # Line 4
+    "  ▗█▛ ▗█▛ ▜█▖ ▜█▖  ", # Line 5
+    " ▗█▛ ▗██▄▂▄██▖ ▜█▖ ",
+    " ▐█▌  ▀▀▔▔▔▀▀  ▐█▌ ",
+    " ▝██▆▄▄▆███▆▄▄▆██▘ ", # Line 6: Center point/cutout
+    "   ▔▀▀▀▔▕█ ▔▀▀▀▔   ", # Line 7: Neck
+    "        ▐█▌        ", # Line 8: Stem top
+    " ▟▙     ███     ▞▚ ", # Line 9: Stem bottom
+    "▝▜▛▘            ▛▜ "  # Line 10: Bottom rank and suit
+]
+
+        # inner_lines = overlay(top = inner_lines, bottom= generate_face_pictogram('A', suit))
+    lines = [
+        "          ╔═══════════════════╗          ",           
+       f"     ╔════║{BLACK}{inner_lines[0]}{END}║════╗",
+       f"╔════║{BLACK}▐▂▞{END} ║{BLACK}{inner_lines[1]}{END}║{BLACK} ▟▙{END} ║════╗",
+       f"║{BLACK} ▀▜{END} ║{BLACK}▐▔▚{END} ║{BLACK}{inner_lines[2]}{END}║{BLACK}▝▜▛▘{END}║ {BLACK}▟▙ {END}║",   
+       f"║{BLACK} ▚▞{END} ║    ║{BLACK}{inner_lines[3]}{END}║    ║{BLACK}▝▜▛▘{END}║",          
+       f"║    ║    ║{BLACK}{inner_lines[4]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[5]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[6]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[7]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[8]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[9]}{END}║    ║    ║",     
+       f"║    ║    ║{BLACK}{inner_lines[10]}{END}║    ║    ║",  
+       f"║{BLACK} ▟▙ {END}║    ║{BLACK}{inner_lines[11]}{END}║    ║{BLACK}▐▗▀▖{END}║",   
+       f"║{BLACK}▝▜▛▘{END}║ {BLACK}▟▙ {END}║{BLACK}{inner_lines[12]}{END}║{BLACK}▗▀▚{END} ║{BLACK}▐▝▄▘{END}║",  
+       f"╚════║{BLACK}▝▜▛▘{END}║{BLACK}{inner_lines[13]}{END}║{BLACK}▝▄▞▖{END}║════╝",
+       f"     ╚════║{BLACK}{inner_lines[14]}{END}║════╝     ",
+        "          ╚═══════════════════╝          "                          
+    ]
+
+    return "\n".join(lines)
+
+if __name__ == '__main__': 
+    print(title_ascii())
