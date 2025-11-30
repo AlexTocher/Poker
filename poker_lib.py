@@ -4,9 +4,9 @@ import traceback
 from poker_ui import *
 from poker_hands import *
 
-slow = True
+slow = False
 if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 1
-else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.01, 0.01, 0.01
+else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.0, 0.01, 0.0
 
 CURSES_ERROR_TRACEBACK = None 
 EXIT_MSG = 'Press shift + Q to exit'
@@ -35,10 +35,10 @@ class Game:
                                                                deck2 = DeckOfCards( back_color=BLUE) )
             
         self.redraw()
-        time.sleep(1)
-        self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = 0.1)
+        time.sleep(1 if slow else 0.1)
+        self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = DEAL_DELAY)
         # self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
-        time.sleep(2)
+        time.sleep(2 if slow else 0.1)
         self.reset(cycle = False)
 
         self.deck.shuffle()
@@ -60,12 +60,15 @@ class Game:
 
 
     def end_game(self):
+
+        for p in self.players:
+            p.sb, p.bb, p.dealer = False, False, False
         if self.visualizer: 
             self.redraw()
             self.deck.sort()
-            self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'TOO FEW PLAYERS; END OF GAME'.center(6 + 7 * CARD_WIDTH, ' '))
-            self.deck.deal(self.table, 5, discard=False, visualizer=self.visualizer, delay = 1)
-            time.sleep(5)
+            self.visualizer.addstr(self.table.y + 2 , self.table.x, 'TOO FEW PLAYERS; END OF GAME'.center(4 + 5 * CARD_WIDTH, ' '))
+            self.deck.deal(self.table, 5, discard=False, visualizer=self.visualizer, delay = DEAL_DELAY)
+            time.sleep(5 if slow else 1)
         else: return
 
     def __repr__(self):
@@ -114,7 +117,7 @@ class Game:
         self.deck.y, self.deck.x = MARGIN_Y, MARGIN_X
         self.table.y, self.table.x = max(self.visualizer.center[1]//2, MARGIN_Y + TITLE_HEIGHT + 2), self.visualizer.center[0] - COMMUNITY_WIDTH//2
         self.table.poty, self.table.potx = MARGIN_Y,  self.visualizer.max_x - MARGIN_X - POT_WIDTH,
-        self.table.bety, self.table.betx = self.table.poty + (self.visualizer.max_y - 2 * MARGIN_Y - FOOTER_HEIGHT)//2,  self.table.potx
+        self.table.bety, self.table.betx = PLAYER_START_ROW,  self.table.potx
         PLAYER_WIDTH = (self.table.potx - MARGIN_X)//len(self.players)
         PLAYER_START_ROW = self.visualizer.max_y - PLAYER_HEIGHT - MARGIN_Y
         BETTING_ROW = PLAYER_START_ROW + 12
@@ -135,18 +138,14 @@ class Game:
                 p.is_out = True
                 if not self.visualizer: print(p.name + ' is eliminated')
         
-        self.players = [p for p in self.players if p.is_out] + [p for p in self.players if not p.is_out]
+        self.players = [p for p in self.players if not p.is_out] + [p for p in self.players if p.is_out] 
         
         if cycle:   
             for p in self.players:
-                p.dealer = False
-                p.sb = False
-                p.bb = False
+                p.sb, p.bb, p.dealer = False, False, False
             self.players[0].dealer = True
             self.players[1].sb = True
             self.players[2].bb = True
-
-            
 
         if raise_blinds: 
             self.sb += raise_blinds
@@ -615,7 +614,7 @@ class Player:
             body += pad
 
         ftr = betting_str.ljust(PLAYER_WIDTH * 2) + '\n' + f'Stack: £{self.stack:.2f}'.ljust(PLAYER_WIDTH) +'\n' +  f'Stake: £{self.total_contribution:.2f}'.ljust(PLAYER_WIDTH)\
-              if not self.is_out else 'Out'.ljust(PLAYER_WIDTH) + '\n'.ljust(PLAYER_WIDTH)
+              if not self.is_out else '\nOut'.ljust(PLAYER_WIDTH) + '\n'.ljust(PLAYER_WIDTH)
         return hdr + '\n' + body + '\n' + ftr + 3 * pad
 
 
@@ -645,9 +644,9 @@ class Pot:
         return f"Pot(amount={self.amount:.2f}, cap={self.cap:.2f}, eligible=[{names}])"
 
     def __str__(self):
-        names = "\n              ".join([p.name for p in self.eligible_players])
+        names = "\n              ".join([p.name.ljust(POT_WIDTH - 14) for p in self.eligible_players])
         cap_str = f" (Cap: £{self.cap:.2f})" if self.cap != float('inf') else ""
-        return f"£{self.amount:.2f}{cap_str} ".ljust(POT_WIDTH) #+ f"\n    Eligible: {names}"
+        return f"£{self.amount:.2f}{cap_str} ".ljust(POT_WIDTH) + f"\n    Eligible: {names}"
 
     
 class Table:
