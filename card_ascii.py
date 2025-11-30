@@ -354,23 +354,23 @@ def title_ascii():
 
         # inner_lines = overlay(top = inner_lines, bottom= generate_face_pictogram('A', suit))
     lines = [
-        "          ╔═══════════════════╗          ",           
-       f"     ╔════║{BLACK}{inner_lines[0]}{END}║════╗",
-       f"╔════║{BLACK}▐▂▞{END} ║{BLACK}{inner_lines[1]}{END}║{BLACK} ▟▙{END} ║════╗",
-       f"║{BLACK} ▀▜{END} ║{BLACK}▐▔▚{END} ║{BLACK}{inner_lines[2]}{END}║{BLACK}▝▜▛▘{END}║ {BLACK}▟▙ {END}║",   
-       f"║{BLACK} ▚▞{END} ║    ║{BLACK}{inner_lines[3]}{END}║    ║{BLACK}▝▜▛▘{END}║",          
-       f"║    ║    ║{BLACK}{inner_lines[4]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[5]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[6]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[7]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[8]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[9]}{END}║    ║    ║",     
-       f"║    ║    ║{BLACK}{inner_lines[10]}{END}║    ║    ║",  
-       f"║{BLACK} ▟▙ {END}║    ║{BLACK}{inner_lines[11]}{END}║    ║{BLACK}▐▗▀▖{END}║",   
-       f"║{BLACK}▝▜▛▘{END}║ {BLACK}▟▙ {END}║{BLACK}{inner_lines[12]}{END}║{BLACK}▗▀▚{END} ║{BLACK}▐▝▄▘{END}║",  
-       f"╚════║{BLACK}▝▜▛▘{END}║{BLACK}{inner_lines[13]}{END}║{BLACK}▝▄▞▖{END}║════╝",
-       f"     ╚════║{BLACK}{inner_lines[14]}{END}║════╝     ",
-        "          ╚═══════════════════╝          "                          
+        "          " +                               f"╔══════════" +           f"═════════╗          ",           
+        f"     " +            f"╔════" +             f"║{BLACK}{inner_lines[0]}{END}" +  f"║"       + f"════╗",
+       f"╔════" +             f"║{BLACK}▐▂▞{END} " + f"║{BLACK}{inner_lines[1]}{END}" +  f"║{BLACK} ▟▙{END} ║" +             f"════╗",
+       f"║{BLACK} ▀▜{END} " + f"║{BLACK}▐▔▚{END} " + f"║{BLACK}{inner_lines[2]}{END}" +  f"║{BLACK}▝▜▛▘{END}║" + f" {BLACK}▟▙ {END}║",   
+       f"║{BLACK} ▚▞{END} " + f"║    " +             f"║{BLACK}{inner_lines[3]}{END}" +  f"║" +       f"    ║" + f"{BLACK}▝▜▛▘{END}║",          
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[4]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[5]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[6]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[7]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[8]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[9]}{END}" +  f"║" +       f"    ║"             + f"    ║",     
+       f"║    " +             f"║    " +             f"║{BLACK}{inner_lines[10]}{END}" + f"║" +       f"    ║"             + f"    ║",  
+       f"║{BLACK} ▟▙ {END}" + f"║    " +             f"║{BLACK}{inner_lines[11]}{END}" + f"║" +       f"    ║" + f"{BLACK}▐▗▀▖{END}║",   
+       f"║{BLACK}▝▜▛▘{END}" + f"║ {BLACK}▟▙ {END}" + f"║{BLACK}{inner_lines[12]}{END}" + f"║{BLACK}▗▀▚{END} ║" + f"{BLACK}▐▝▄▘{END}║",  
+       f"╚════" +             f"║{BLACK}▝▜▛▘{END}" + f"║{BLACK}{inner_lines[13]}{END}" + f"║{BLACK}▝▄▞▖{END}║" +             f"════╝",
+       f"     " +             f"╚════" +             f"║{BLACK}{inner_lines[14]}{END}" + f"║" +       f"════╝     ",
+        "          " +                               f"╚══════════" +           f"═════════╝          "                          
     ]
 
     return "\n".join(lines)

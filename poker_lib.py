@@ -3,6 +3,8 @@ import sys
 import traceback
 from poker_ui import *
 from poker_hands import *
+from contextlib import redirect_stdout 
+from utils import format_time
 
 slow = False
 if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 1
@@ -69,7 +71,9 @@ class Game:
             self.visualizer.addstr(self.table.y + 2 , self.table.x, 'TOO FEW PLAYERS; END OF GAME'.center(4 + 5 * CARD_WIDTH, ' '))
             self.deck.deal(self.table, 5, discard=False, visualizer=self.visualizer, delay = DEAL_DELAY)
             time.sleep(5 if slow else 1)
-        else: return
+        else: 
+            print('\n' + 'Too few players remaining; ending game...')
+            return
 
     def __repr__(self):
         player_names = ", ".join([p.name for p in self.players])
@@ -91,7 +95,7 @@ class Game:
                 self.running = False
                 if self.visualizer:
                     # Optional: Display a quick message before exiting
-                    self.visualizer.addstr(2, 2, "Quitting game...             ", 1)
+                    self.visualizer.addstr(0, self.visualizer.max_x - MARGIN_X - len(EXIT_MSG), "Quitting game...".ljust(len(EXIT_MSG)), 1)
                 return True
         return False
         
@@ -136,7 +140,7 @@ class Game:
         for p in self.players:
             if p.stack == 0 and not p.is_out:
                 p.is_out = True
-                if not self.visualizer: print(p.name + ' is eliminated')
+                if not self.visualizer: print('\n' + p.name + ' is eliminated')
         
         self.players = [p for p in self.players if not p.is_out] + [p for p in self.players if p.is_out] 
         
@@ -196,7 +200,7 @@ class Game:
             print(combine_cards(self.table.cards) + '\n\n\n')
 
         start_idx = [p.last_raised for p in self.players].index(True)
-        reordered_players = self.players[start_idx:] + self.players[:start_idx] #show last peson that raised first
+        reordered_players = self.players[start_idx:] + self.players[:start_idx] #show last person that raised first
         # 1. Evaluate hands and Rank players
         for i, p in  enumerate(reordered_players):
             if not p.folded or not p.is_out: # Only evaluate hands of active players
@@ -210,12 +214,8 @@ class Game:
             else:
                 p.score = (0, (0,)) # Folded players have the lowest score
 
-           
-
         rank_players(self.players) # Assigns p.rank (0-based, handles ties)
-
-     
-        
+ 
         # 2. Distribute Pots
         if not self.visualizer: print('\n--- Pot Distribution ---')
         remaining_pot_amount = self.table.total_pot_amount # Should be zero at the end
@@ -268,7 +268,7 @@ class Game:
 
         if not self.visualizer: 
             print('\n--- Final Stacks ---')
-            for p in self.players: print( p.name + f' has: £{p.stack:.2f}')
+            for p in self.players: print( p.name + f' has: £{p.stack:.2f}' if not p.is_out else p.name + f' is out' )
 
         assert(abs(remaining_pot_amount) < 0.01) # Check for zero remaining money
 
@@ -478,34 +478,39 @@ class Game:
     
     
     
-    def play(self, max_rounds = 5):
+    def play(self, max_rounds = 5, suppress_output = False):
 
         n = 0
-        while self.running and self.n_rounds < max_rounds:
-            if len([p for p in self.players if not p.is_out]) < 3: 
-                self.running = False # End game if not enough players
-                self.end_game()
-                return
-            self.deal()
-            self.round_of_betting()
-            if self._check_for_quit(): break
-            self.flop()
-            self.round_of_betting()
-            if self._check_for_quit(): break
-            self.turn()
-            self.round_of_betting()
-            if self._check_for_quit(): break
-            self.river()
-            self.round_of_betting()
-            if self._check_for_quit(): break
-            self.show_hands()
-            n += 1
-            if n%len(self.players) == 0:
-                self.reset(raise_blinds=1) 
-                self.n_rounds += 1
-            else:
-                self.reset()
-            if self._check_for_quit(): break # Exit the loop if Q was pressed here too
+        context = open(os.devnull, 'w') if suppress_output and not self.visualizer else sys.stdout
+        t_0 = time.time()
+        with redirect_stdout(context):
+            while self.running and self.n_rounds < max_rounds:
+                if len([p for p in self.players if not p.is_out]) < 3: 
+                    self.running = False # End game if not enough players
+                    self.end_game()
+                    t_1= time.time()
+                    break
+                self.deal()
+                self.round_of_betting()
+                if self._check_for_quit(): break
+                self.flop()
+                self.round_of_betting()
+                if self._check_for_quit(): break
+                self.turn()
+                self.round_of_betting()
+                if self._check_for_quit(): break
+                self.river()
+                self.round_of_betting()
+                if self._check_for_quit(): break
+                self.show_hands()
+                n += 1
+                if n%len(self.players) == 0:
+                    self.reset(raise_blinds=1) 
+                    self.n_rounds += 1
+                else:
+                    self.reset()
+                if self._check_for_quit(): break # Exit the loop if Q was pressed here too
+        print(f'Game Over: ' + format_time(t_1 - t_0))
 
 class Player:
     def __init__(self, idx, name=""):
