@@ -3,12 +3,13 @@ import sys
 import traceback
 from poker_ui import *
 from poker_hands import *
+from poker_utils import * 
 from contextlib import redirect_stdout 
-from utils import format_time
 
-slow = False
+
+slow = True 
 if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 1
-else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.0, 0.01, 0.0
+else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.0, 0.0, 0.0
 
 CURSES_ERROR_TRACEBACK = None 
 EXIT_MSG = 'Press shift + Q to exit'
@@ -431,8 +432,24 @@ class Game:
                 idx += 1
                 continue
             
-            # Action: Player either calls/checks or raises (using mock methods)
-            bet_placed, hdr = player_obj.call_check_bet(self.minimum_bet, verbose = False if self.visualizer else True) # Simplified to always call/go all-in
+            action, raise_amount = player_obj.get_ai_action(self)
+
+            if action == 'call' or action == 'check': 
+                bet_placed, hdr = player_obj.call_check_bet(self.minimum_bet, verbose = False if self.visualizer else True)
+            elif action == 'raise':
+                bet_placed, hdr = player_obj.raise_bet(raise_amount, self.minimum_bet, verbose = False if self.visualizer else True)
+            elif action == 'fold':
+                cards_to_discard, hdr = player_obj.fold(verbose = False if self.visualizer else True)
+                self.deck.cards += cards_to_discard
+
+            if player_obj.folded:
+                if self.visualizer:
+                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
+                    self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
+                    self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
+                else: print(f"{player_obj.name} folded")
+
             # Check if player raised (i.e., new total contribution > old minimum_bet)
             if player_obj.total_contribution > self.minimum_bet:
                 
@@ -486,9 +503,8 @@ class Game:
         with redirect_stdout(context):
             while self.running and self.n_rounds < max_rounds:
                 if len([p for p in self.players if not p.is_out]) < 3: 
-                    self.running = False # End game if not enough players
+                    self.running = False # End game if not enough players 
                     self.end_game()
-                    t_1= time.time()
                     break
                 self.deal()
                 self.round_of_betting()
@@ -510,7 +526,7 @@ class Game:
                 else:
                     self.reset()
                 if self._check_for_quit(): break # Exit the loop if Q was pressed here too
-        print(f'Game Over: ' + format_time(t_1 - t_0))
+        print(f'Game Over: ' + format_time(time.time() - t_0))
 
 class Player:
     def __init__(self, idx, name=""):
@@ -550,6 +566,37 @@ class Player:
         self.is_all_in = False
         assert(len(self.hand) == 0)
         return out
+    
+    def get_ai_action(self, game):
+        """
+        [PLACEHOLDER] This method will contain the logic for the AI (e.g., calling a Neural Network).
+
+        Args:
+            game (Game): The current Game instance, providing access to all state information.
+
+        Returns:
+            Tuple[str, int]: (action, amount)
+            Action can be 'fold', 'check', 'call', 'bet', or 'all-in'.
+            Amount is the *additional* chips to place (0 for fold/check/call).
+        """
+        # --- Current Placeholder Logic: Always call/check if possible, otherwise fold ---
+        
+        # Calculate amount needed to call
+        to_call = game.minimum_bet - self.total_contribution
+        
+        if to_call == 0:
+            # If no bet has been made, check
+            return 'check', 0
+        elif self.stack >= to_call:
+            # If we have enough chips, call
+            return 'call', to_call 
+        else:
+            # If we don't have enough chips, we must either fold or go all-in (we'll fold for now)
+            return 'fold', 0 
+        
+        # NOTE: Your Neural Network logic will replace this simple logic.
+        # It will use the game state (self.hand, game.table.community_cards, game.minimum_bet, 
+        # other players' actions) to decide.
     
     
     def call_check_bet(self, minimum_bet, verbose = True):
@@ -601,11 +648,13 @@ class Player:
 
         return bet_amount, out_str
 
-    def fold(self):
-        out = self.reset_hand()
-        print( self.name + ' folds')
+    def fold(self, verbose = True):
+        out = self.cards
+        self.cards = []
+        out_str = self.name + ' folds'
         self.folded = True
-        return out
+        if verbose: print(out_str )
+        return out, out_str
     
     def player_info(self, betting_str = '', show = False, no_cards = False, height = 12):
         hdr = self.name + '\n'
