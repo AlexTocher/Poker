@@ -4,6 +4,7 @@ import traceback
 from poker_ui import *
 from poker_hands import *
 from poker_utils import * 
+from poker_ai import *
 from contextlib import redirect_stdout 
 
 
@@ -649,8 +650,8 @@ class Player:
         return bet_amount, out_str
 
     def fold(self, verbose = True):
-        out = self.cards
-        self.cards = []
+        out = self.hand
+        self.hand = []
         out_str = self.name + ' folds'
         self.folded = True
         if verbose: print(out_str )
