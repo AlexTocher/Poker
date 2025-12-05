@@ -47,8 +47,8 @@ class Visualizer:
             self.stdscr.bkgd(' ', curses.color_pair(1))
             self.stdscr.clear()
             try:
-                max_y, max_x = self.stdscr.getmaxyx()
-                for y in range(max_y):
+                self.max_y, self.max_x = self.stdscr.getmaxyx()
+                for y in range(self.max_y):
                     self.stdscr.chgat(y, 0, -1, curses.color_pair(1) | curses.A_BOLD)
             except curses.error:
                 # Handles cases where the terminal is too small
@@ -484,3 +484,77 @@ class Visualizer:
         curses.curs_set(0) # Hide cursor
         
         return action, amount
+    
+    # --- NEW REUSABLE INPUT FUNCTION ---
+    def get_entered_input(self, y, x, prompt_text, default_value='', is_numeric=False, allowed_input = []):
+        """
+        Gets a string input from the user at a specified position, confirmed by Enter.
+        Handles basic editing (backspace).
+        """
+        # 1. Setup Curses for Blocking Input
+        self.stdscr.nodelay(False) # Blocking mode
+
+        current_input = default_value
+        
+        # Area to clear (make sure we cover the prompt and the input line below it)
+        clear_y_start = y
+        clear_y_end = y + 1 # Prompt on Y, Input on Y+1
+
+        while True:
+            curses.curs_set(1)
+            # 2. Redraw the prompt and current input
+            self.clear_area(clear_y_start, 0, clear_y_end, self.max_x)
+            
+            # Draw the static prompt text
+            self.addstr(y, x, prompt_text)
+            
+            # Draw the input below the prompt
+            input_y = y + 1
+            input_prompt = '>> '
+            full_input_line = f"{input_prompt}{current_input}"
+            self.addstr(input_y, x, full_input_line)
+            
+
+
+            # 3. Move cursor and get key
+            try:
+                # x position is x + length of '>> ' + length of current_input
+                cursor_x = x + len(input_prompt) + len(current_input)
+                self.stdscr.move(input_y, cursor_x)
+            except curses.error:
+                pass
+
+            key = self.stdscr.getch()
+
+            # 4. Process Key Input
+            if key in (curses.KEY_ENTER, 10): # Enter key
+                if not allowed_input: break
+                elif current_input in allowed_input: break
+                else: 
+                    curses.curs_set(0)
+                    self.clear_area(clear_y_end, 0, clear_y_end, self.max_x)
+                    self.addstr(input_y, x, input_prompt + (RED + 'Invalid Input' + END).ljust(UIConfig.COMMUNITY_WIDTH), wait = 1.0)
+                    current_input = ''
+                    continue
+
+            elif key in (curses.KEY_BACKSPACE, 127): # Backspace
+                if len(current_input) > 0:
+                    current_input = current_input[:-1]
+            
+            # Allow printable characters (or digits if numeric mode)
+            elif 32 <= key <= 126: 
+                char = chr(key)
+                if is_numeric and char in string.digits:
+                    current_input += char
+                elif not is_numeric:
+                    current_input += char
+            
+            elif key == 27: # ESC key
+                current_input = '' 
+                break
+
+        # 5. Cleanup and Return
+        # self.clear_area(clear_y_start, 0, clear_y_end, self.max_x)
+        self.stdscr.nodelay(True) # Back to non-blocking
+        curses.curs_set(0) # Hide cursor
+        return current_input.strip()

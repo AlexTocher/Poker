@@ -17,24 +17,20 @@ CURSES_ERROR_TRACEBACK = None
 EXIT_MSG = 'Press shift + Q to exit'
 
 class Game:
-    def __init__(self, players, buyin, sb, stdscr = None):
+    def __init__(self, players = [], buyin = 100, sb = 2, stdscr = None):
         self.sb = sb # small blind
         self.bb = 2*sb # big blind
         self.minimum_bet = 0
         self.n_rounds = 0
-        self.table = Table(len(players)) # class to store info about what's on the table
+        self.table = Table() # class to store info about what's on the table
+        self.players = players
         self.visualizer =  None
         self.running = True # NEW: State variable for controlling the main game loop
 
         if stdscr:
-            # Initialize the visualizer if stdscr is provided
+            # Initialize the visualizer if stdscr is provided   
             self.visualizer = Visualizer(stdscr)
 
-        for p in players: p.stack += buyin
-        self.players = players
-
-        # decide on order of players by drawing a card, highest card goes first
-     
         self.deck = DeckOfCards(back_color=MAGENTA)
         if self.visualizer: self.visualizer.starting_animation(deck1 = DeckOfCards( back_color=MAGENTA), 
                                                                deck2 = DeckOfCards( back_color=BLUE) )
@@ -46,6 +42,16 @@ class Game:
         time.sleep(2 if slow else 0.1)
         self.reset(cycle = False)
 
+        if self.visualizer:
+            players = self.player_startup()
+
+        if len(players) < 3: 
+            raise Exception("Too few players")
+  
+        for p in players: p.stack += buyin
+        self.players = players
+
+        # decide on order of players by drawing a card, highest card goes first
         self.deck.shuffle()
         self.deck.cut()
         self.deck.deal(players, 1, visualizer=self.visualizer)
@@ -62,6 +68,122 @@ class Game:
                
         self.players = players[winning_idx - 1:] + players[:winning_idx - 1] # reorder players to start with dealer
         self.reset() 
+
+    def player_startup(self):
+       
+        """
+        Interactively asks the user for player details (name, type) 
+        and creates the initial list of Player/AIPlayer objects.
+        Uses the shared Visualizer and the new get_entered_input helper.
+        """
+        if not self.visualizer:
+            return []
+       
+
+        player_list = []
+        player_id_counter = 0
+        min_players = 3
+        max_players = 8 # Define a reasonable limit
+
+        y_prompt, x_prompt = self.table.y + 3, self.table.x
+
+        new_player = True
+        while len(player_list) < max_players and new_player:
+            self.redraw(table = False)
+            self.visualizer.addstr(self.table.y, self.table.x, "PLAYER INFO".center(4 + 5 * CARD_WIDTH, '-'))
+
+            add_prompt = f"Add a new player? [Y/N] "
+            
+            new_player = self.visualizer.get_entered_input(
+                y=y_prompt, 
+                x=x_prompt, 
+                prompt_text=add_prompt, 
+                default_value='',
+                allowed_input=['Y', 'N']
+            )
+
+            if new_player == 'N': break
+         
+        
+            # 1. Get Player Name
+            name_prompt = f"Player {player_id_counter + 1} Name"
+            
+            player_name = self.visualizer.get_entered_input(
+                y=y_prompt, 
+                x=x_prompt, 
+                prompt_text=name_prompt, 
+                default_value=f"Player #{player_id_counter + 1}"
+            )
+   
+
+            # 2. Get Player Type (Human or AI)
+            type_prompt = f"Is {player_name} Human (H) or AI (A)? [H/A]:"
+         
+            player_type_input = self.visualizer.get_entered_input(
+                y=y_prompt + 3, 
+                x=x_prompt, 
+                prompt_text=type_prompt, 
+                default_value='A',
+                allowed_input=['H', 'A']
+            ).upper()
+    
+            is_ai = (player_type_input == 'A')
+
+            # 3. Create Player object
+            if is_ai:
+                player_list.append(Player(player_id_counter, player_name))
+            else:
+                player_list.append(Player(player_id_counter, player_name, is_human=True))
+            
+            self.players = player_list
+            
+            player_id_counter += 1
+
+        while True:
+            self.redraw()
+        # 4. Ask about filler AI players
+            n_current_players = len(player_list)
+            if n_current_players < max_players:
+                filler_prompt = f"Do you want to add AI players to fill the table? [Y/N]:"
+                filler_input = self.visualizer.get_entered_input(
+                    y=y_prompt, 
+                    x=x_prompt, 
+                    prompt_text=filler_prompt, 
+                    default_value='',
+                    allowed_input=['Y', 'N']
+                ).upper()
+                if filler_input == 'Y':
+                    n_prompt = f"How many AI players do you want (up to {max_players - n_current_players} extra):"
+                    n_ai_to_add = self.visualizer.get_entered_input(
+                        y=y_prompt + 3, 
+                        x=x_prompt, 
+                        prompt_text=n_prompt, 
+                        default_value='',
+                        is_numeric=True,
+                        allowed_input=[str(i) for i in range(max_players - n_current_players + 1)]
+                    ).upper()
+
+                    n_ai_to_add = int(n_ai_to_add)
+                    if filler_input == 'Y':
+                        if n_ai_to_add > max_players - n_current_players: 
+                            n_ai_to_add = max_players - n_current_players
+                        for i in range(n_ai_to_add):
+                            ai_name = f"Bot #{player_id_counter + 1}"
+                            player_list.append(Player(player_id_counter, ai_name))
+                            self.players = player_list
+                            player_id_counter += 1                      
+
+            if len(self.players) < 3:
+                self.visualizer.addstr(y_prompt + 5, x_prompt,  (RED + 'Must have 3 or more players...' + END).ljust(UIConfig.COMMUNITY_WIDTH), wait = 1.0)
+            else: break
+
+
+        self.redraw(table = False)
+        
+        
+        return player_list
+        
+  
 
 
     def end_game(self):
@@ -103,7 +225,7 @@ class Game:
         return False
         
     
-    def redraw(self):
+    def redraw(self, table= True):
         if not self.visualizer: return 
         time.sleep(BETTING_DELAY)
 
@@ -114,8 +236,8 @@ class Game:
         self.visualizer.addstr(0, self.visualizer.max_x - UIConfig.MARGIN_X - len(EXIT_MSG),  EXIT_MSG )
         self.visualizer.addstr(UIConfig.MARGIN_Y, self.visualizer.center[0] - UIConfig.TITLE_WIDTH//2, UIConfig.TITLE_ART)
         self.visualizer.addstr(self.deck.y, self.deck.x, self.deck.deck_info())
-        self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info())
-        self.visualizer.addstr(self.table.y, self.table.x, self.table.table_info())
+        if table: self.visualizer.addstr(self.table.y, self.table.x, self.table.table_info())
+        self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info())  
         self.visualizer.addstr(self.table.poty, self.table.potx, self.table.pot_info())
         self.visualizer.addstrs([(p.y, p.x, p.player_info()) for p in self.players])
 
@@ -124,9 +246,9 @@ class Game:
         self.deck.y, self.deck.x = UIConfig.MARGIN_Y, UIConfig.MARGIN_X
         self.table.y, self.table.x = max(self.visualizer.center[1]//2, UIConfig.MARGIN_Y + UIConfig.TITLE_HEIGHT + 2), self.visualizer.center[0] - UIConfig.COMMUNITY_WIDTH//2
         self.table.poty, self.table.potx = UIConfig.MARGIN_Y,  self.visualizer.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH,
-        
-        UIConfig.PLAYER_WIDTH = (self.table.potx - 2 * UIConfig.MARGIN_X)//len(self.players)
-        if UIConfig.PLAYER_WIDTH < 32 : UIConfig.PLAYER_WIDTH = (self.table.potx - 40 - 2 * UIConfig.MARGIN_X)//(len(self.players) - 1)
+        if self.players:
+            UIConfig.PLAYER_WIDTH = (self.table.potx - 2 * UIConfig.MARGIN_X)//len(self.players)
+            if UIConfig.PLAYER_WIDTH < 32 : UIConfig.PLAYER_WIDTH = (self.table.potx - 40 - 2 * UIConfig.MARGIN_X)//(len(self.players) - 1)
         UIConfig.PLAYER_START_ROW = self.visualizer.max_y - UIConfig.PLAYER_HEIGHT - UIConfig.MARGIN_Y
         UIConfig.BETTING_ROW = UIConfig.PLAYER_START_ROW + UIConfig.PLAYER_HEIGHT - 3
         self.table.bety, self.table.betx = UIConfig.PLAYER_START_ROW,  self.table.potx
@@ -736,7 +858,7 @@ class Pot:
 
     
 class Table:
-    def __init__(self, n_players):
+    def __init__(self):
         self.cards = []
         self.pots: List[Pot] = []
         self.x = UIConfig.COMMUNITY_X
@@ -897,7 +1019,7 @@ def main_tui(stdscr, n_players = 5, buyin = 100, sb = 2):
     
     # --- CRITICAL TRY/EXCEPT BLOCK INSIDE CURSES ---
     try:
-        game = Game(players, buyin, sb, stdscr=stdscr)
+        game = Game( buyin=buyin, sb=sb, stdscr=stdscr)
         
         # 2. Execute the game logic
         game.play(max_rounds = 50)
