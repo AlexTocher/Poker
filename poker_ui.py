@@ -267,6 +267,8 @@ class Visualizer:
             n += 1
         deck1.shuffle()
         deck2.shuffle()
+
+        title_card = title_ascii()
         
         while i > -3*overlap_num:
             x1, x2 = centre[0] - i * centre[0]/n_cards, centre[0] + (i + 3 * overlap_num) * centre[0]/n_cards
@@ -279,12 +281,14 @@ class Visualizer:
             if x2 >= centre[0]: self.addstr(round(centre[1] + f(x2))+h , round(x2)+w, deck1.cards.pop().back, overwrite= check_overwrite(x2))
             if x4 >= centre[0]: self.addstr(round(centre[1] - f(x4))+h , round(x4)+w, deck2.cards.pop().back, overwrite= not check_overwrite(x4))
 
+            if x1 > centre[0]: 
+                self.addstr(centre[1]-len(title_card.split('\n'))//2 - 1 , centre[0]-len(title_card.split('\n')[0])//2 - 1, title_card , ignore_spaces=True )
+
             time.sleep(0.02)
 
             i -= 1
 
-        title_card = title_ascii()
-        self.addstr(centre[1]-len(title_card.split('\n'))//2 - 1 , centre[0]-len(title_card.split('\n')[0])//2 - 1, title_card , 0.5, ignore_spaces=True )
+        
         self.addstr(UIConfig.MARGIN_Y , centre[0] - UIConfig.TITLE_WIDTH//2, UIConfig.TITLE_ART, 0.5,  ignore_spaces=True)
         self.addstr(round(y_dim * 3/4) , centre[0] - UIConfig.AUTHOR_WIDTH//2, UIConfig.AUTHOR_ART, ignore_spaces=True)
 
