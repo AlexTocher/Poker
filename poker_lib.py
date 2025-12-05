@@ -14,7 +14,7 @@ if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 2
 else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.0, 0.0, 0.0
 
 CURSES_ERROR_TRACEBACK = None 
-EXIT_MSG = 'Press shift + Q to exit'
+EXIT_MSG = 'Press ESC to exit'
 
 class Game:
     def __init__(self, players = [], buyin = 100, sb = 2, stdscr = None):
@@ -35,12 +35,12 @@ class Game:
         if self.visualizer: self.visualizer.starting_animation(deck1 = DeckOfCards( back_color=MAGENTA), 
                                                                deck2 = DeckOfCards( back_color=BLUE) )
             
-        self.redraw()
-        time.sleep(1 if slow else 0.1)
-        self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = DEAL_DELAY)
-        # self.visualizer.addstr(UIConfig.MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
-        time.sleep(2 if slow else 0.1)
-        self.reset(cycle = False)
+        self.redraw(table = False)
+        time.sleep(DEAL_DELAY * 5 )
+        self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = DEAL_DELAY, hdr = False )
+        self.visualizer.addstr(self.table.y , self.table.x , 'WELCOME!'.center(4 + 5 * CARD_WIDTH, '-'))
+        time.sleep(DEAL_DELAY * 10 )
+        self.reset(cycle = False, redraw=False)
 
         if self.visualizer:
             players = self.player_startup()
@@ -112,7 +112,8 @@ class Game:
                 y=y_prompt, 
                 x=x_prompt, 
                 prompt_text=name_prompt, 
-                default_value=f"Player #{player_id_counter + 1}"
+                default_value=f"Player #{player_id_counter + 1}", 
+                max_len = UIConfig.MAX_PLAYER_NAME_LENGTH
             )
    
 
@@ -123,7 +124,7 @@ class Game:
                 y=y_prompt + 3, 
                 x=x_prompt, 
                 prompt_text=type_prompt, 
-                default_value='A',
+                default_value='',
                 allowed_input=['H', 'A']
             ).upper()
     
@@ -215,8 +216,8 @@ class Game:
         if self.visualizer:
             # Use the non-blocking input method
             key = self.visualizer.get_input()
-            # Check for 'q' or 'Q' (curses returns integer key codes)
-            if key in [ord('Q')]:
+         
+            if key == 27: #ESC key
                 self.running = False
                 if self.visualizer:
                     # Optional: Display a quick message before exiting
@@ -242,6 +243,8 @@ class Game:
         self.visualizer.addstrs([(p.y, p.x, p.player_info()) for p in self.players])
 
     def get_positions(self):
+
+        
         
         self.deck.y, self.deck.x = UIConfig.MARGIN_Y, UIConfig.MARGIN_X
         self.table.y, self.table.x = max(self.visualizer.center[1]//2, UIConfig.MARGIN_Y + UIConfig.TITLE_HEIGHT + 2), self.visualizer.center[0] - UIConfig.COMMUNITY_WIDTH//2
@@ -256,7 +259,7 @@ class Game:
             p.y, p.x = UIConfig.PLAYER_START_ROW, UIConfig.MARGIN_X + UIConfig.PLAYER_WIDTH * p.idx
 
 
-    def reset(self, raise_blinds = False, cycle = True):
+    def reset(self, raise_blinds = False, cycle = True, redraw = True):
         for p in self.players: self.deck.cards += p.reset()
         self.deck.cards += self.table.reset()
         self.deck.reset()
@@ -281,8 +284,8 @@ class Game:
         if raise_blinds: 
             self.sb += raise_blinds
             self.bb = 2 * self.sb
-        self.redraw()
         
+        if redraw: self.redraw()
          # Ensure total contribution is reset for all players
         for p in self.players: assert(p.total_contribution == 0.0) 
         for p in self.players: assert(len(p.hand) == 0)
@@ -417,7 +420,7 @@ class Game:
             hdr += '\n\n' + f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(UIConfig.BETTING_WIDTH)
             for p in sorted(self.players, key = lambda p : p.idx):
                 if p.is_out: continue
-                body += f'{p.name}:  '.rjust(16) + f' £{p.total_contribution:.2f}' 
+                body += f'{p.name}'.rjust(UIConfig.MAX_PLAYER_NAME_LENGTH) + ': ' + f' £{p.total_contribution:.2f}' 
                 if p.folded: body += ' (folded)'
                 if p.is_all_in: body += ' (all-in)'
                 body = body.ljust(UIConfig.BETTING_WIDTH) + '\n'
@@ -878,8 +881,8 @@ class Table:
         self.pots = [] # Clear all pots for a new hand
         return out
     
-    def table_info(self): 
-        hdr = 'COMMUNITY CARDS'.center(5 * CARD_WIDTH + 4, '-') + '\n\n\n'
+    def table_info(self, hdr = True): 
+        hdr = 'COMMUNITY CARDS'.center(5 * CARD_WIDTH + 4, '-') + '\n\n\n' if hdr else '\n\n\n'
         body = combine_cards(self.cards)
         pad = '\n' + ' ' * (4 + 5 * CARD_WIDTH)
         while len(body.split('\n')) < 10:
@@ -956,7 +959,7 @@ class DeckOfCards:
         self.cards = self.cards[n%len(self.cards):] + self.cards[0:n%len(self.cards)]
 
 
-    def deal(self, recievers, n_cards, visualizer = None, discard = True, delay = 0):
+    def deal(self, recievers, n_cards, visualizer = None, discard = True, delay = 0, hdr = False):
 
         if not delay: delay = DEAL_DELAY
         
@@ -978,7 +981,7 @@ class DeckOfCards:
                 elif isinstance(r, Table): 
                     r.cards += [self.cards.pop()]
                     if visualizer: 
-                        visualizer.addstr(r.y, r.x, r.table_info())
+                        visualizer.addstr(r.y, r.x, r.table_info(hdr = hdr))
                         visualizer.addstr(self.y, self.x, self.deck_info(), delay)
             
             

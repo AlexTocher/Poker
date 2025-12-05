@@ -53,11 +53,13 @@ class Visualizer:
             except curses.error:
                 # Handles cases where the terminal is too small
                 pass
+        self.max_x_table = self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH
 
         self.stdscr.refresh()
 
     def get_screen_dimensions(self):
         self.max_y, self.max_x = self.stdscr.getmaxyx()
+        self.max_x_table = self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH
         self.clear_area(0,0,0,self.max_x)
         self.center = (self.max_x//2, self.max_y//2)
         warning_msg = ''
@@ -319,9 +321,9 @@ class Visualizer:
         
         while True:
             # Clear input line
-            self.clear_area(prompt_y, 0,prompt_y + 1, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+            self.clear_area(prompt_y, 0,prompt_y + 1, self.max_x_table)
             # Display current input
-            display_text = f"Raise by\n>> £{current_input}"
+            display_text = f"Raise by (ESC to go back)\n>> £{current_input}"
             self.addstr(prompt_y, prompt_x, display_text.ljust(UIConfig.PLAYER_WIDTH))
             self.stdscr.refresh()
             
@@ -410,7 +412,7 @@ class Visualizer:
                 prompt_text = static_options_text + '\n>> ' + current_input
                 
                 # Clear and redraw the prompt area
-                self.clear_area(prompt_y, 0, prompt_y + 1, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+                self.clear_area(prompt_y, 0, prompt_y + 1, self.max_x_table )
                 self.addstr(prompt_y, prompt_x, prompt_text.ljust(UIConfig.PLAYER_WIDTH))
                 
                 # Move cursor
@@ -469,8 +471,8 @@ class Visualizer:
             else:
                 current_input += char
 
-                    # Exit on Shift+Q (handled on key press, not only on enter)
-            if key == ord('Q'):
+                    # Exit on ESC (handled on key press, not only on enter)
+            if key == 27:
                 raise Exception("User requested exit.")
 
 
@@ -479,14 +481,14 @@ class Visualizer:
             # Ignore other keys and keep waiting
         
         # Cleanup input line
-        self.clear_area(prompt_y, 0,prompt_y, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+        self.clear_area(prompt_y, 0,prompt_y, self.max_x_table )
         self.stdscr.nodelay(True) # Back to non-blocking
         curses.curs_set(0) # Hide cursor
         
         return action, amount
     
     # --- NEW REUSABLE INPUT FUNCTION ---
-    def get_entered_input(self, y, x, prompt_text, default_value='', is_numeric=False, allowed_input = []):
+    def get_entered_input(self, y, x, prompt_text, default_value='', is_numeric=False, allowed_input = [], max_len = None):
         """
         Gets a string input from the user at a specified position, confirmed by Enter.
         Handles basic editing (backspace).
@@ -503,7 +505,10 @@ class Visualizer:
         while True:
             curses.curs_set(1)
             # 2. Redraw the prompt and current input
-            self.clear_area(clear_y_start, 0, clear_y_end, self.max_x)
+            self.clear_area(clear_y_start, x, clear_y_end, self.max_x_table)
+
+            if max_len and len(current_input) < max_len:
+                self.clear_area(clear_y_end + 1, x, clear_y_end + 1, self.max_x_table)
             
             # Draw the static prompt text
             self.addstr(y, x, prompt_text)
@@ -532,7 +537,7 @@ class Visualizer:
                 elif current_input in allowed_input: break
                 else: 
                     curses.curs_set(0)
-                    self.clear_area(clear_y_end, 0, clear_y_end, self.max_x)
+                    self.clear_area(clear_y_end, 0, clear_y_end, self.max_x_table)
                     self.addstr(input_y, x, input_prompt + (RED + 'Invalid Input' + END).ljust(UIConfig.COMMUNITY_WIDTH), wait = 1.0)
                     current_input = ''
                     continue
@@ -544,17 +549,21 @@ class Visualizer:
             # Allow printable characters (or digits if numeric mode)
             elif 32 <= key <= 126: 
                 char = chr(key)
-                if is_numeric and char in string.digits:
-                    current_input += char
-                elif not is_numeric:
-                    current_input += char
+                if max_len and len(current_input) >= max_len:
+                    self.addstr(clear_y_end + 1, x, (RED + f'Input too long (max length {max_len} characters)' + END).ljust(UIConfig.COMMUNITY_WIDTH))
+                else:
+                    if is_numeric and char in string.digits:
+                        current_input += char
+                    elif not is_numeric:
+                        current_input += char
             
             elif key == 27: # ESC key
                 current_input = '' 
                 break
 
         # 5. Cleanup and Return
-        # self.clear_area(clear_y_start, 0, clear_y_end, self.max_x)
+        if max_len and len(current_input) <= max_len:
+            self.clear_area(clear_y_end + 1, x, clear_y_end + 1, self.max_x_table)
         self.stdscr.nodelay(True) # Back to non-blocking
         curses.curs_set(0) # Hide cursor
         return current_input.strip()
