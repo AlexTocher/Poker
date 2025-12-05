@@ -94,14 +94,14 @@ class PokerAI:
 
         return action_model, magnitude_model
 
-    def _get_input_vector(self, game_state):
+    def _get_input_vector(self, game):
         """
         Converts the Game object state into the fixed-size (442) feature vector.
         This is the most crucial part of feature engineering.
         """
         features = []
         
-        current_player = game_state.players[self.player_id]
+        current_player = game.players[self.player_id]
         
         # --- 1. Private Hand Encoding (104 features) ---
         card1_oh = card_to_one_hot(current_player.hole_cards[0] if current_player.hole_cards else None)
@@ -110,7 +110,7 @@ class PokerAI:
         features.extend(card2_oh)
         
         # --- 2. Community Cards Encoding (260 features) ---
-        community_cards = game_state.community_cards
+        community_cards = game.table.cards
         for i in range(MAX_COMMUNITY_CARDS):
             card = community_cards[i] if i < len(community_cards) else None
             features.extend(card_to_one_hot(card))
@@ -122,25 +122,25 @@ class PokerAI:
         MAX_STACK = 1000
         
         # Normalize pot and stacks
-        pot_size_norm = normalize(game_state.pot, 0, MAX_POT)
-        to_call_norm = normalize(game_state.current_bet - current_player.current_bet, 0, MAX_POT)
+        pot_size_norm = normalize(game.pot, 0, MAX_POT)
+        to_call_norm = normalize(game.total_contribution - current_player.total_contribution, 0, MAX_POT)
         stack_norm = normalize(current_player.chips, 0, MAX_STACK)
-        # Minimum legal raise amount (can be complex, but for now use current_bet as a proxy max)
-        min_raise_norm = normalize(game_state.current_bet * 2, 0, MAX_POT) 
+        # Minimum legal raise amount (can be complex, but for now use total_contribution as a proxy max)
+        min_raise_norm = normalize(game.total_contribution * 2, 0, MAX_POT) 
         
         features.extend([pot_size_norm, to_call_norm, stack_norm, min_raise_norm])
 
         # Stage of the Game (One-hot 4 features: Pre-flop, Flop, Turn, River)
         stage_oh = np.zeros(4)
-        if game_state.stage == 'pre_flop': stage_oh[0] = 1
-        elif game_state.stage == 'flop': stage_oh[1] = 1
-        elif game_state.stage == 'turn': stage_oh[2] = 1
-        elif game_state.stage == 'river': stage_oh[3] = 1
+        if   len(game.table.cards)  <  3: stage_oh[0] = 1 # pre flop
+        elif len(game.table.cards)  == 3: stage_oh[1] = 1 # flop
+        elif len(game.table.cards)  == 4: stage_oh[2] = 1 # turn
+        elif len(game.table.cards)  == 5: stage_oh[3] = 1 # river
         features.extend(stage_oh)
         
         # --- 4. Opponent State Encoding (70 features) ---
         
-        opponents = [p for p in game_state.players.values() if p.id != self.player_id]
+        opponents = [p for p in game.players.values() if p.id != self.player_id]
         
         opponent_features = []
         
@@ -153,7 +153,7 @@ class PokerAI:
                 # 2. Has Folded (1 feature)
                 opp_folded = 1.0 if opponent.folded else 0.0
                 # 3. Normalized Current Bet (1 feature)
-                opp_bet_norm = normalize(opponent.current_bet, 0, MAX_POT)
+                opp_bet_norm = normalize(opponent.total_contribution, 0, MAX_POT)
                 # 4. Last Action (7 features - simple one-hot encoding for last action)
                 # (e.g., [Check, Call, Bet, Raise, Fold, All-in, None/Initial])
                 last_action_oh = np.zeros(7)
@@ -161,9 +161,9 @@ class PokerAI:
                 # For now, we simulate a simple action state:
                 if opponent.folded:
                     last_action_oh[4] = 1
-                elif opponent.current_bet > 0 and opponent.current_bet == game_state.current_bet:
+                elif opponent.total_contribution > 0 and opponent.total_contribution == game.total_contribution:
                     last_action_oh[1] = 1 # Called
-                elif opponent.current_bet > 0 and opponent.current_bet > game_state.current_bet:
+                elif opponent.total_contribution > 0 and opponent.total_contribution > game.total_contribution:
                     last_action_oh[3] = 1 # Raised
                 else:
                     last_action_oh[6] = 1 # Unknown/Initial/Checked
@@ -184,13 +184,13 @@ class PokerAI:
             
         return np.array(features, dtype=np.float32)
 
-    def get_ai_action(self, game_state):
+    def get_ai_action(self, game):
         """
         The main function to get the AI's action based on the current game state.
         It uses the dual network approach.
         """
         # 1. Transform game state into the input vector
-        input_vector = self._get_input_vector(game_state)
+        input_vector = self._get_input_vector(game)
         # Reshape for the model: (1, 442)
         input_vector = input_vector.reshape(1, INPUT_VECTOR_SIZE) 
 
@@ -206,7 +206,7 @@ class PokerAI:
         
         elif action_index == 1:
             # Check if we can check (0 to call) or must call
-            to_call = game_state.current_bet - game_state.players[self.player_id].current_bet
+            to_call = game.total_contribution - game.players[self.player_id].total_contribution
             if to_call == 0:
                 return 'check', 0 # Check
             else:
@@ -221,8 +221,8 @@ class PokerAI:
             
             # Simple example conversion: 
             # Bet size is between min_raise and max_stack
-            min_raise = game_state.current_bet # Placeholder: needs to be true min legal raise
-            max_raise = game_state.players[self.player_id].chips
+            min_raise = game.total_contribution # Placeholder: needs to be true min legal raise
+            max_raise = game.players[self.player_id].chips
             
             # Linear interpolation of the normalized amount
             raise_amount = min_raise + normalized_raise * (max_raise - min_raise)

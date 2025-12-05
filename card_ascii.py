@@ -265,7 +265,7 @@ def overlap_cards(cards, v_spacing=3, h_spacing=1, reverse=False):
 
 GAP_ART = [" " * 11] * 9 
 
-def combine_cards(cards: list[str], n_cards_per_line: int = 13,  discarded_cards = None, overlap = (0,0), reverse = (0,0)) -> str:
+def combine_cards(cards: list[str], n_cards_per_line: int = 13,  discarded_cards = None, overlap = (0,0), reverse = (0,0), justify_width = 0) -> str:
     """
     Takes a list of multiline card strings and combines them horizontally, 
     wrapping to a new line after every n_cards_per_line.
@@ -329,6 +329,10 @@ def combine_cards(cards: list[str], n_cards_per_line: int = 13,  discarded_cards
         # Add an empty line between line wraps for better separation
         if i + n_cards_per_line < num_units:
              final_output_lines.append("")
+
+    if justify_width:
+        for i, line in enumerate(final_output_lines):
+            final_output_lines[i] = line.ljust(justify_width)
 
     return "\n".join(final_output_lines)
 

@@ -4,12 +4,13 @@ import traceback
 from poker_ui import *
 from poker_hands import *
 from poker_utils import * 
-from poker_ai import *
+# from poker_ai import *
 from contextlib import redirect_stdout 
+from config import UIConfig
 
 
 slow = True 
-if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 1
+if slow: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.1, 0.25, 2
 else: DEAL_DELAY, BETTING_DELAY, SHOW_HANDS_DELAY = 0.0, 0.0, 0.0
 
 CURSES_ERROR_TRACEBACK = None 
@@ -41,7 +42,7 @@ class Game:
         self.redraw()
         time.sleep(1 if slow else 0.1)
         self.deck.deal(self.table, 5, discard=False, visualizer = self.visualizer, delay = DEAL_DELAY)
-        # self.visualizer.addstr(MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
+        # self.visualizer.addstr(UIConfig.MARGIN_Y + 2 , self.table.x - (1 + CARD_WIDTH), 'WELCOME!'.center(6 + 7 * CARD_WIDTH, ' '))
         time.sleep(2 if slow else 0.1)
         self.reset(cycle = False)
 
@@ -97,7 +98,7 @@ class Game:
                 self.running = False
                 if self.visualizer:
                     # Optional: Display a quick message before exiting
-                    self.visualizer.addstr(0, self.visualizer.max_x - MARGIN_X - len(EXIT_MSG), "Quitting game...".ljust(len(EXIT_MSG)), 1)
+                    self.visualizer.addstr(0, self.visualizer.max_x - UIConfig.MARGIN_X - len(EXIT_MSG), "Quitting game...".ljust(len(EXIT_MSG)), 1)
                 return True
         return False
         
@@ -107,11 +108,11 @@ class Game:
         time.sleep(BETTING_DELAY)
 
         self.visualizer.get_screen_dimensions()
-        self.visualizer.clear_area(MARGIN_Y, MARGIN_X, self.visualizer.max_y, self.visualizer.max_x)
+        self.visualizer.clear_area(UIConfig.MARGIN_Y, UIConfig.MARGIN_X, self.visualizer.max_y, self.visualizer.max_x)
         self.get_positions()
 
-        self.visualizer.addstr(0, self.visualizer.max_x - MARGIN_X - len(EXIT_MSG),  EXIT_MSG )
-        self.visualizer.addstr(MARGIN_Y, self.visualizer.center[0] - TITLE_WIDTH//2, TITLE_ART)
+        self.visualizer.addstr(0, self.visualizer.max_x - UIConfig.MARGIN_X - len(EXIT_MSG),  EXIT_MSG )
+        self.visualizer.addstr(UIConfig.MARGIN_Y, self.visualizer.center[0] - UIConfig.TITLE_WIDTH//2, UIConfig.TITLE_ART)
         self.visualizer.addstr(self.deck.y, self.deck.x, self.deck.deck_info())
         self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info())
         self.visualizer.addstr(self.table.y, self.table.x, self.table.table_info())
@@ -119,16 +120,18 @@ class Game:
         self.visualizer.addstrs([(p.y, p.x, p.player_info()) for p in self.players])
 
     def get_positions(self):
-        global PLAYER_WIDTH, PLAYER_START_ROW, BETTING_ROW
-        self.deck.y, self.deck.x = MARGIN_Y, MARGIN_X
-        self.table.y, self.table.x = max(self.visualizer.center[1]//2, MARGIN_Y + TITLE_HEIGHT + 2), self.visualizer.center[0] - COMMUNITY_WIDTH//2
-        self.table.poty, self.table.potx = MARGIN_Y,  self.visualizer.max_x - MARGIN_X - POT_WIDTH,
-        self.table.bety, self.table.betx = PLAYER_START_ROW,  self.table.potx
-        PLAYER_WIDTH = (self.table.potx - MARGIN_X)//len(self.players)
-        PLAYER_START_ROW = self.visualizer.max_y - PLAYER_HEIGHT - MARGIN_Y
-        BETTING_ROW = PLAYER_START_ROW + 12
+        
+        self.deck.y, self.deck.x = UIConfig.MARGIN_Y, UIConfig.MARGIN_X
+        self.table.y, self.table.x = max(self.visualizer.center[1]//2, UIConfig.MARGIN_Y + UIConfig.TITLE_HEIGHT + 2), self.visualizer.center[0] - UIConfig.COMMUNITY_WIDTH//2
+        self.table.poty, self.table.potx = UIConfig.MARGIN_Y,  self.visualizer.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH,
+        
+        UIConfig.PLAYER_WIDTH = (self.table.potx - 2 * UIConfig.MARGIN_X)//len(self.players)
+        if UIConfig.PLAYER_WIDTH < 32 : UIConfig.PLAYER_WIDTH = (self.table.potx - 40 - 2 * UIConfig.MARGIN_X)//(len(self.players) - 1)
+        UIConfig.PLAYER_START_ROW = self.visualizer.max_y - UIConfig.PLAYER_HEIGHT - UIConfig.MARGIN_Y
+        UIConfig.BETTING_ROW = UIConfig.PLAYER_START_ROW + UIConfig.PLAYER_HEIGHT - 3
+        self.table.bety, self.table.betx = UIConfig.PLAYER_START_ROW,  self.table.potx
         for p in self.players:
-            p.y, p.x = PLAYER_START_ROW, MARGIN_X + PLAYER_WIDTH * p.idx
+            p.y, p.x = UIConfig.PLAYER_START_ROW, UIConfig.MARGIN_X + UIConfig.PLAYER_WIDTH * p.idx
 
 
     def reset(self, raise_blinds = False, cycle = True):
@@ -205,13 +208,13 @@ class Game:
         reordered_players = self.players[start_idx:] + self.players[:start_idx] #show last person that raised first
         # 1. Evaluate hands and Rank players
         for i, p in  enumerate(reordered_players):
-            if not p.folded or not p.is_out: # Only evaluate hands of active players
+            if not p.folded and not p.is_out: # Only evaluate hands of active players
                 p.hand_name, p.best_hand, p.score, p.discarded = get_best_5_card_hand(self.table.cards + p.hand)
                 if self.visualizer:
                     self.visualizer.clear_area(self.table.y + 1, self.table.x, self.table.y + CARD_HEIGHT + 6, self.table.x + 7 + 7 * CARD_WIDTH )
                     self.visualizer.addstr(self.table.y, self.table.x, self.table.table_info(), 0)
                     self.visualizer.addstrs([(pl.y, pl.x, pl.player_info(show = True if j <= i and not pl.folded else False )) for j, pl in enumerate(reordered_players)], SHOW_HANDS_DELAY)
-                    self.visualizer.addstr(p.y, p.x, p.player_info(no_cards = True), 0)
+                    self.visualizer.addstr(p.y, p.x, p.player_info(show_cards = False), 0)
                     self.visualizer.addstr(self.table.y + 2, self.table.x, self.winner_info(p), SHOW_HANDS_DELAY)
             else:
                 p.score = (0, (0,)) # Folded players have the lowest score
@@ -247,7 +250,7 @@ class Game:
                         print(ftr)
                     else: 
                         self.visualizer.addstrs([(pl.y, pl.x, pl.player_info(show = True if not pl.folded else True)) for  pl in self.players])
-                        self.visualizer.addstr(p.y, p.x, p.player_info(no_cards = True))
+                        self.visualizer.addstr(p.y, p.x, p.player_info(show_cards = False))
                         lines = self.winner_info(p).split('\n')
                         self.visualizer.addstr(self.table.y + 2, self.table.x, '\n'.join(lines[:-2] + [ftr + lines[-2][4 + 5 * CARD_WIDTH:]] + [lines[-1]]) , SHOW_HANDS_DELAY)
                 remaining_pot_amount -= pot.amount
@@ -286,17 +289,18 @@ class Game:
 
         
     def betting_info(self): 
-        hdr = 'BETTING'.center(BETTING_WIDTH, '-')
+        hdr = 'BETTING'.center(UIConfig.BETTING_WIDTH, '-')
         body = ''
         if sum([p.total_contribution for p in self.players]) != 0:
-            hdr += '\n\n' + f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(BETTING_WIDTH)
+            hdr += '\n\n' + f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(UIConfig.BETTING_WIDTH)
             for p in sorted(self.players, key = lambda p : p.idx):
                 if p.is_out: continue
-                body += f'{p.name}:'.ljust(12) + f' £{p.total_contribution:.2f}' 
-                if p.is_all_in: body += ' all-in'
-                body = body.ljust(BETTING_WIDTH) + '\n'
+                body += f'{p.name}:  '.rjust(16) + f' £{p.total_contribution:.2f}' 
+                if p.folded: body += ' (folded)'
+                if p.is_all_in: body += ' (all-in)'
+                body = body.ljust(UIConfig.BETTING_WIDTH) + '\n'
 
-        pad = '\n' + ' '.ljust(BETTING_WIDTH)
+        pad = '\n' + ' '.ljust(UIConfig.BETTING_WIDTH)
         while len(body.split('\n')) < 12:
             body += pad
     
@@ -374,7 +378,7 @@ class Game:
         if self.table.total_pot_amount == 0: # Pre-Flop
             hdr = self.players[0].name +  f' is the dealer'
             if self.visualizer:
-                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)   
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)   
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 0 ])
                 self.visualizer.addstr(self.players[0].y, self.players[0].x,  self.players[0].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -384,7 +388,7 @@ class Game:
             hdr = self.players[1].name + f' is the small blind'
             self.players[1].raise_bet(self.sb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 1 ])
                 self.visualizer.addstr(self.players[1].y, self.players[1].x,  self.players[1].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -395,7 +399,7 @@ class Game:
             hdr = self.players[2].name + f' is the big blind'
             self.players[2].raise_bet(self.bb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(BETTING_ROW, 0, BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 2 ])
                 self.visualizer.addstr(self.players[2].y, self.players[2].x,  self.players[2].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -433,7 +437,8 @@ class Game:
                 idx += 1
                 continue
             
-            action, raise_amount = player_obj.get_ai_action(self)
+
+            action, raise_amount = player_obj.get_action(self)
 
             if action == 'call' or action == 'check': 
                 bet_placed, hdr = player_obj.call_check_bet(self.minimum_bet, verbose = False if self.visualizer else True)
@@ -445,11 +450,13 @@ class Game:
 
             if player_obj.folded:
                 if self.visualizer:
-                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
                 else: print(f"{player_obj.name} folded")
+                idx +=1 
+                continue
 
             # Check if player raised (i.e., new total contribution > old minimum_bet)
             if player_obj.total_contribution > self.minimum_bet:
@@ -463,7 +470,7 @@ class Game:
                 player_obj.last_raised = True
                 
                 if self.visualizer:
-                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -472,7 +479,7 @@ class Game:
                 # Player called or checked
                 all_called_checked += 1 
                 if self.visualizer: 
-                    self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -487,7 +494,7 @@ class Game:
             for i, pot in enumerate(self.table.pots):
                 print(f"Pot {i+1}: {pot}")
         else:
-            self.visualizer.clear_area(BETTING_ROW, 0,BETTING_ROW, self.visualizer.max_x)
+            self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
             self.visualizer.addstr(self.table.poty, self.table.potx, self.table.pot_info())
             self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info(), BETTING_DELAY)
 
@@ -530,7 +537,7 @@ class Game:
         print(f'Game Over: ' + format_time(time.time() - t_0))
 
 class Player:
-    def __init__(self, idx, name=""):
+    def __init__(self, idx, name="", is_human = False):
         self.name = name
         self.hand = []
         self.best_hand = [] 
@@ -545,14 +552,17 @@ class Player:
         self.is_all_in: bool = False
         self.is_out = False
         self.last_raised = False
+        self.is_human = is_human # Store flag
 
         self.idx = idx
-        self.x = MARGIN_X + idx * PLAYER_WIDTH
-        self.y = PLAYER_START_ROW
+        self.x = UIConfig.MARGIN_X + idx * UIConfig.PLAYER_WIDTH
+        self.y = UIConfig.PLAYER_START_ROW
 
         self.dealer = False
         self.sb = False
         self.bb = False
+
+        # self.ai = PokerAI(self.idx) 
 
     def show_hand(self):
         print(combine_cards([c for c in self.hand]))
@@ -568,7 +578,7 @@ class Player:
         assert(len(self.hand) == 0)
         return out
     
-    def get_ai_action(self, game):
+    def get_action(self, game):
         """
         [PLACEHOLDER] This method will contain the logic for the AI (e.g., calling a Neural Network).
 
@@ -580,10 +590,29 @@ class Player:
             Action can be 'fold', 'check', 'call', 'bet', or 'all-in'.
             Amount is the *additional* chips to place (0 for fold/check/call).
         """
-        # --- Current Placeholder Logic: Always call/check if possible, otherwise fold ---
-        
         # Calculate amount needed to call
         to_call = game.minimum_bet - self.total_contribution
+
+        if self.is_human:
+            if game.visualizer: return game.visualizer.get_human_action(self, to_call)
+            else:
+                while True:
+                    choice = input('Call/Check (C), Fold (F), or Raise (R)? >> ')
+                    if choice == 'C':  
+                        if to_call == 0: 
+                            return 'check', 0
+                        elif self.stack >= to_call:
+                            return 'call', to_call 
+                    elif choice == 'F':
+                        return 'fold', 0
+                    elif choice == 'R':
+                        amount = input('Amount to raise: £')
+                        return 'raise', float(amount)
+                    print('Please enter a valid choice')
+            
+        # --- Current Placeholder Logic: Always call/check if possible, otherwise fold ---
+        
+   
         
         if to_call == 0:
             # If no bet has been made, check
@@ -657,19 +686,21 @@ class Player:
         if verbose: print(out_str )
         return out, out_str
     
-    def player_info(self, betting_str = '', show = False, no_cards = False, height = 12):
-        hdr = self.name + '\n'
+    def player_info(self, betting_str = '', show_cards = True, show = False, height = 12):
+        hdr = self.name 
+        if not self.is_human: hdr += ' (AI)'
+        hdr += '\n'
         if self.dealer: hdr += 'Dealer'
         elif self.sb: hdr += 'Small Blind'
         elif self.bb: hdr += 'Big Blind'
-        body = ' ' * PLAYER_WIDTH
-        if not no_cards: body = combine_cards(self.hand, overlap = (1,0) ,reverse = (not show, 0))
-        pad = '\n' + ' ' * PLAYER_WIDTH
+        body = ' ' * UIConfig.PLAYER_WIDTH
+        if self.hand and show_cards: body = combine_cards(self.hand, overlap = (1,0) ,reverse = (not show, 0), justify_width=UIConfig.PLAYER_WIDTH)
+        pad = '\n' + ' ' * UIConfig.PLAYER_WIDTH
         while len(body.split('\n')) < height :
             body += pad
 
-        ftr = betting_str.ljust(PLAYER_WIDTH * 2) + '\n' + f'Stack: £{self.stack:.2f}'.ljust(PLAYER_WIDTH) +'\n' +  f'Stake: £{self.total_contribution:.2f}'.ljust(PLAYER_WIDTH)\
-              if not self.is_out else '\nOut'.ljust(PLAYER_WIDTH) + '\n'.ljust(PLAYER_WIDTH)
+        ftr = betting_str.ljust(UIConfig.PLAYER_WIDTH * 2) + '\n' + f'Stack: £{self.stack:.2f}'.ljust(UIConfig.PLAYER_WIDTH) +'\n' +  f'Stake: £{self.total_contribution:.2f}'.ljust(UIConfig.PLAYER_WIDTH)\
+              if not self.is_out else '\nOut'.ljust(UIConfig.PLAYER_WIDTH) + '\n'.ljust(UIConfig.PLAYER_WIDTH)
         return hdr + '\n' + body + '\n' + ftr + 3 * pad
 
 
@@ -699,21 +730,21 @@ class Pot:
         return f"Pot(amount={self.amount:.2f}, cap={self.cap:.2f}, eligible=[{names}])"
 
     def __str__(self):
-        names = "\n              ".join([p.name.ljust(POT_WIDTH - 14) for p in self.eligible_players])
+        names = "\n              ".join([p.name.ljust(UIConfig.POT_WIDTH - 14) for p in self.eligible_players])
         cap_str = f" (Cap: £{self.cap:.2f})" if self.cap != float('inf') else ""
-        return f"£{self.amount:.2f}{cap_str} ".ljust(POT_WIDTH) + f"\n    Eligible: {names}"
+        return f"£{self.amount:.2f}{cap_str} ".ljust(UIConfig.POT_WIDTH) + f"\n    Eligible: {names}"
 
     
 class Table:
     def __init__(self, n_players):
         self.cards = []
         self.pots: List[Pot] = []
-        self.x = COMMUNITY_X
-        self.y = COMMUNITY_Y
-        self.potx = COMMUNITY_X + 6 + 7 * CARD_WIDTH + MARGIN_X
-        self.poty = POT_Y
+        self.x = UIConfig.COMMUNITY_X
+        self.y = UIConfig.COMMUNITY_Y
+        self.potx = UIConfig.COMMUNITY_X + 6 + 7 * CARD_WIDTH + UIConfig.MARGIN_X
+        self.poty = UIConfig.POT_Y
         self.betx = self.potx
-        self.bety = POT_Y + 20
+        self.bety = UIConfig.PLAYER_START_ROW
         
     @property
     def total_pot_amount(self) -> float:
@@ -734,13 +765,13 @@ class Table:
         return hdr + '\n' + body 
     
     def pot_info(self): 
-        hdr = 'POT'.center(POT_WIDTH, '-') +'\n\n'
+        hdr = 'POT'.center(UIConfig.POT_WIDTH, '-') +'\n\n'
         body = ''
         if self.total_pot_amount != 0: 
-            body = f'Total Pot: £{self.total_pot_amount:.2f} across {len(self.pots)} pot(s)'.ljust(POT_WIDTH) 
+            body = f'Total Pot: £{self.total_pot_amount:.2f} across {len(self.pots)} pot(s)'.ljust(UIConfig.POT_WIDTH) 
             for i, pot in enumerate(self.pots):
                 body += '\n\n' + f"Pot {i+1}: {pot}"
-        pad = '\n' + ' ' * POT_WIDTH
+        pad = '\n' + ' ' * UIConfig.POT_WIDTH
         while len((hdr + body).split('\n')) < self.bety - self.poty :
             body += pad
     
@@ -780,8 +811,8 @@ class DeckOfCards:
     def __init__(self, n_decks = 1, back_color = RED):
         self.cards = []
         self.discard = []
-        self.x = DECK_X
-        self.y = DECK_Y
+        self.x = UIConfig.DECK_X
+        self.y = UIConfig.DECK_Y
         for i in range(n_decks):
             for suit in SUITS:
                 for rank in RANKS:
@@ -862,6 +893,7 @@ def main_tui(stdscr, n_players = 5, buyin = 100, sb = 2):
     
     # 1. Initialize Game
     players = [Player(i, name = f'Player #{i+1}') for i in range(n_players)]
+    players = players + [Player(n_players, name = 'Alex', is_human = True)]
     
     # --- CRITICAL TRY/EXCEPT BLOCK INSIDE CURSES ---
     try:
@@ -902,7 +934,7 @@ if __name__ == '__main__':
     # --- FINAL OUTER TRY/EXCEPT BLOCK (CRITICAL FOR PRE-CURSES ERRORS) ---
     try:
         # Start the application, which handles initialization and game creation
-        poker_tui(n_players = 8, buyin = 100)
+        poker_tui(n_players = 9, buyin = 100)
     
     except Exception as e:
         # This catches errors that occur either:

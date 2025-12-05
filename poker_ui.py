@@ -3,55 +3,15 @@ import os
 from card_ascii import *
 import time
 import math
+import string 
+from config import UIConfig
 
 RED_PAIR = 1
 BLACK_PAIR = 2
 HIGHLIGHT_PAIR = 3
 MESSAGE_PAIR = 4
 
-#spacing globals
-MARGIN_X = 4
-MARGIN_Y = 2
-FOOTER_HEIGHT = 4
-PLAYER_WIDTH = 24
-PLAYER_HEIGHT = 16
-PLAYER_START_ROW = 32
-BETTING_ROW = PLAYER_START_ROW + 12
 
-DECK_X = MARGIN_X
-DECK_Y = MARGIN_Y
-DECK_HEIGHT = 14
-
-
-
-COMMUNITY_X = MARGIN_X + (4 + 3 * CARD_WIDTH) + (1 + 2 * CARD_WIDTH) + MARGIN_X
-COMMUNITY_Y = 2 * MARGIN_Y
-COMMUNITY_WIDTH = 4 + 5 * CARD_WIDTH
-
-POT_Y = MARGIN_Y
-POT_WIDTH = 36
-
-BETTING_WIDTH = POT_WIDTH
-
-TITLE_ART = r"""  _____ _______  __    _    ____     _   _  ___  _     ____  _____ __  __ _ 
- |_   _| ____\ \/ /   / \  / ___|   | | | |/ _ \| |   |  _ \| ____|  \/  ( )
-   | | |  _|  \  /   / _ \ \___ \   | |_| | | | | |   | | | |  _| | |\/| |/ 
-   | | | |___ /  \  / ___ \ ___) |  |  _  | |_| | |___| |_| | |___| |  | |  
-   |_| |_____/_/\_\/_/  _\_\____/_  |_|_|_|\___/|_____|____/|_____|_|  |_|  
-                       |  _ \ / _ \| |/ / ____|  _ \                        
-                       | |_) | | | |   /|  _| | |_) |                       
-                       |  __/| |_| |   \| |___|  _ <                        
-                       |_|    \___/|_|\_\_____|_| \_\ """
-TITLE_WIDTH = max(len(line) for line in TITLE_ART.strip().split('\n')) 
-TITLE_HEIGHT = len(TITLE_ART.strip().split('\n'))
-
-AUTHOR_ART = r"""  ______   __     _    _     _______  __  _____ ___   ____ _   _ _____ ____  
- | __ ) \ / /    / \  | |   | ____\ \/ / |_   _/ _ \ / ___| | | | ____|  _ \ 
- |  _ \\ V /    / _ \ | |   |  _|  \  /    | || | | | |   | |_| |  _| | |_) |
- | |_) || |    / ___ \| |___| |___ /  \    | || |_| | |___|  _  | |___|  _ < 
- |____/ |_|   /_/   \_\_____|_____/_/\_\   |_| \___/ \____|_| |_|_____|_| \_\ """
-
-AUTHOR_WIDTH = max(len(line) for line in AUTHOR_ART.strip().split('\n')) 
 
 
 class Visualizer:
@@ -109,7 +69,7 @@ class Visualizer:
             if y_check: warning_msg += ' and '
             warninhg_msg += f'width (currently {self.max_x}; recommended {self.ideal_x})'
     
-        if warning_msg: self.addstr(0, MARGIN_X, RED + 'WARNING: Screen too small in ' + warning_msg + END)
+        if warning_msg: self.addstr(0, UIConfig.MARGIN_X, RED + 'WARNING: Screen too small in ' + warning_msg + END)
 
     def get_input(self):
         """
@@ -291,11 +251,11 @@ class Visualizer:
         m = (2/3) * (centre[1]) * (centre[0])**-2
         omega = x_dim/10
         check_overwrite = lambda x : math.cos(omega * (x - x_dim//2)/x_dim) > 0
-        f = lambda x : (m * (x - x_dim//2)**2 + offset)* math.sin(omega * (x - x_dim//2)/x_dim) + centre[1] #
+        f = lambda x : (m * (x - x_dim//2)**2 + offset)* math.sin(omega * (x - x_dim//2)/x_dim) #
         n_cards = (y_dim + x_dim)//8
-        overlap_num = n_cards//2
+        overlap_num = n_cards//4
         # multiply the decks so there is at least 2 * (1 + 2 * overalap_num) * n_cards in each
-        n_decks = 2 * (n_cards + 2 * overlap_num)//52 + 1
+        n_decks = 2 * (n_cards + 6 * overlap_num)//52 + 1
         deck1.cards, deck2.cards = deck1.cards * n_decks, deck2.cards * n_decks
         i, n = n_cards, n_cards
         n, n_decks = 0, (n_cards*4)//52 + 1
@@ -308,16 +268,16 @@ class Visualizer:
         deck1.shuffle()
         deck2.shuffle()
         
-        while i > -overlap_num:
-            x1, x2 = centre[0] - i * centre[0]/n_cards, centre[0] + i * centre[0]/n_cards
-            x3, x4 = centre[0] - (i + overlap_num) * centre[0]/n_cards, centre[0] + (i + overlap_num) * centre[0]/n_cards
+        while i > -3*overlap_num:
+            x1, x2 = centre[0] - i * centre[0]/n_cards, centre[0] + (i + 3 * overlap_num) * centre[0]/n_cards
+            x3, x4 = centre[0] - (i + 2 * overlap_num) * centre[0]/n_cards, centre[0] + (i +  1 * overlap_num) * centre[0]/n_cards
             # self.addstr(1 , 1, f'{x1} {f(x1)}', 0.1)
             # coming from the left:
-            if x1 <= centre[0]: self.addstr(round(f(x1))+h , round(x1)+w, deck1.cards.pop().back, overwrite=check_overwrite(x1))
-            if x3 <= centre[0]: self.addstr(round(f(x4))+h , round(x3)+w, deck2.cards.pop().back,  overwrite = not check_overwrite(x3))
+            if x1 <= centre[0]: self.addstr(round(centre[1] + f(x1))+h , round(x1)+w, deck1.cards.pop().back, overwrite=check_overwrite(x1))
+            if x3 <= centre[0]: self.addstr(round(centre[1] - f(x3))+h , round(x3)+w, deck2.cards.pop().back,  overwrite = not check_overwrite(x3))
             # coming from the right:
-            if x2 >= centre[0]: self.addstr(round(f(x2))+h , round(x2)+w, deck1.cards.pop().back, overwrite= check_overwrite(x2))
-            if x4 >= centre[0]: self.addstr(round(f(x3))+h , round(x4)+w, deck2.cards.pop().back, overwrite= not check_overwrite(x4))
+            if x2 >= centre[0]: self.addstr(round(centre[1] + f(x2))+h , round(x2)+w, deck1.cards.pop().back, overwrite= check_overwrite(x2))
+            if x4 >= centre[0]: self.addstr(round(centre[1] - f(x4))+h , round(x4)+w, deck2.cards.pop().back, overwrite= not check_overwrite(x4))
 
             time.sleep(0.02)
 
@@ -325,8 +285,8 @@ class Visualizer:
 
         title_card = title_ascii()
         self.addstr(centre[1]-len(title_card.split('\n'))//2 - 1 , centre[0]-len(title_card.split('\n')[0])//2 - 1, title_card , 0.5, ignore_spaces=True )
-        self.addstr(MARGIN_Y , centre[0] - TITLE_WIDTH//2, TITLE_ART, 0.5,  ignore_spaces=True)
-        self.addstr(round(y_dim * 3/4) , centre[0] - AUTHOR_WIDTH//2, AUTHOR_ART, ignore_spaces=True)
+        self.addstr(UIConfig.MARGIN_Y , centre[0] - UIConfig.TITLE_WIDTH//2, UIConfig.TITLE_ART, 0.5,  ignore_spaces=True)
+        self.addstr(round(y_dim * 3/4) , centre[0] - UIConfig.AUTHOR_WIDTH//2, UIConfig.AUTHOR_ART, ignore_spaces=True)
 
                 # --- KEY PRESS WAITING LOGIC ---
         wait_msg = "PRESS ANY KEY TO START"
@@ -341,3 +301,182 @@ class Visualizer:
 
         self.stdscr.clear()
         
+
+
+    # NEW: Curses function to get the raise amount
+    def _get_raise_amount(self, player, min_raise_to = 0):
+        self.stdscr.nodelay(False) # Enter blocking mode for input
+        curses.curs_set(1) # Show cursor
+        
+        current_input = ''
+        
+        # Display the prompt for the raise amount
+        prompt_y, prompt_x = UIConfig.BETTING_ROW - 1,  player.x
+        
+        while True:
+            # Clear input line
+            self.clear_area(prompt_y, 0,prompt_y + 1, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+            # Display current input
+            display_text = f"Raise by\n>> £{current_input}"
+            self.addstr(prompt_y, prompt_x, display_text.ljust(UIConfig.PLAYER_WIDTH))
+            self.stdscr.refresh()
+            
+            # Move cursor to end of input text
+            try:
+                # The position needs to be calculated based on the length of the *displayed* input
+                # Offset by 1 for the prompt x, and then by the length of the string before the input box
+                cursor_x = prompt_x + 4 + len(current_input) 
+                self.stdscr.move(prompt_y + 1, cursor_x)
+            except curses.error:
+                 # If cursor positioning fails, continue
+                 pass 
+
+            key = self.stdscr.getch()
+
+            if key in (curses.KEY_ENTER, 10): # Enter key
+                try:
+                    amount = int(current_input)
+                    if amount >= min_raise_to:
+                        self.stdscr.nodelay(True) # Exit blocking mode
+                        curses.curs_set(0) # Hide cursor
+                        return amount
+                    else:
+                        self.addstr(prompt_y, prompt_x, f"Raise must be at least {min_raise_to}", wait=0.5)
+                        current_input = str(min_raise_to) # Reset to minimum
+                except ValueError:
+                    self.addstr(prompt_y, prompt_x, "Invalid amount. Please enter a number.", wait = 0.5)
+                    current_input = str(min_raise_to) # Reset to minimum
+
+            elif key in (curses.KEY_BACKSPACE, 127): # Backspace
+                if len(current_input) > 0:
+                    current_input = current_input[:-1]
+                else:
+                    # Allow backspace to remove the minimum required amount if the input is empty
+                    current_input = ''
+
+            elif chr(key) in string.digits: # Digit keys
+                current_input += chr(key)
+            # Allow 'Esc' to cancel raise (treat as a call/check)
+            elif key == 27:
+                self.stdscr.nodelay(True)
+                curses.curs_set(0)
+                # Return the minimum amount required to call/check
+                return 'CANCEL'
+
+
+    # NEW: Main function to get human action
+    def get_human_action(self, player, to_call):
+        """
+        Pauses the game, draws the action options, and waits for key input.
+        """
+        self.stdscr.nodelay(False) # Enter blocking mode
+        curses.curs_set(1) # Show cursor
+        
+        prompt_y, prompt_x = UIConfig.BETTING_ROW - 1, player.x
+        
+        # 1. Determine action names based on to_call
+        if to_call == 0:
+            call_action = 'Check'
+            call_key = 'C'
+        else:
+            call_action = f'Call £{to_call:.2f}'
+            call_key = 'C'
+            
+
+        
+        # 2. Display Action Prompt
+        options = []
+        options.append(f"{call_action} ({call_key})")
+        options.append("Fold (F)")
+        
+        # Only allow raise if the player has enough stack to cover the raise amount
+        can_raise = player.stack > to_call 
+        if can_raise:
+            options.append(f"Raise (R) ")
+        
+        static_options_text = " / ".join(options)
+        
+        current_input = ''
+        last_drawn_input = ' '
+        # 3. Wait for valid key input
+        while True:
+            curses.curs_set(1) 
+            # --- REDRAW LOGIC (Flicker Fix) ---
+            if current_input != last_drawn_input:
+                prompt_text = static_options_text + '\n>> ' + current_input
+                
+                # Clear and redraw the prompt area
+                self.clear_area(prompt_y, 0, prompt_y + 1, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+                self.addstr(prompt_y, prompt_x, prompt_text.ljust(UIConfig.PLAYER_WIDTH))
+                
+                # Move cursor
+                try:
+                    cursor_x = prompt_x + 3 + len(current_input) 
+                    self.stdscr.move(prompt_y + 1, cursor_x)
+                except curses.error:
+                     pass 
+                
+                last_drawn_input = current_input
+
+            key = self.stdscr.getch()
+            try:
+                char = chr(key) if chr(key) in string.ascii_letters + string.digits else ''
+            except:
+                char = ''
+
+            if key in (curses.KEY_ENTER, 10): # Enter key
+                if current_input == 'F':
+                    action = 'fold'
+                    amount = 0
+                    break
+                
+                elif current_input == call_key:
+                    action = 'call' if to_call > 0 else 'check'
+                    # The amount is the total bet after calling/checking
+                    amount = to_call
+                    break
+                    
+                elif current_input == 'R' and can_raise:
+                    # 4. Handle Raise input (using helper function for numerical input)
+                    amount = self._get_raise_amount(player)
+                    action = 'raise'
+                    # Check if the raise amount is within stack limit
+                    if amount == 'CANCEL':
+                        # If canceled, clear input and continue the loop
+                        current_input = ''
+                        continue 
+
+                    if amount > player.stack: amount = player.stack
+                    if amount != 0: break
+
+                # Exit game on Shift+Q
+                elif char == 'Q':
+                    raise Exception("User requested exit.")
+                
+                current_input = ''
+
+            elif key in (curses.KEY_BACKSPACE, 127): # Backspace
+                if len(current_input) > 0:
+                    current_input = current_input[:-1]
+                else:
+                    # Allow backspace to remove the minimum required amount if the input is empty
+                    current_input = ''
+
+            else:
+                current_input += char
+
+                    # Exit on Shift+Q (handled on key press, not only on enter)
+            if key == ord('Q'):
+                raise Exception("User requested exit.")
+
+
+
+
+            # Ignore other keys and keep waiting
+        
+        # Cleanup input line
+        self.clear_area(prompt_y, 0,prompt_y, self.max_x - UIConfig.MARGIN_X - UIConfig.POT_WIDTH)
+        self.stdscr.nodelay(True) # Back to non-blocking
+        curses.curs_set(0) # Hide cursor
+        
+        return action, amount
