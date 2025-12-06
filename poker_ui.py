@@ -310,7 +310,7 @@ class Visualizer:
 
 
     # NEW: Curses function to get the raise amount
-    def _get_raise_amount(self, player, min_raise_to = 0):
+    def _get_raise_amount(self, player, min_raise = 0):
         self.stdscr.nodelay(False) # Enter blocking mode for input
         curses.curs_set(1) # Show cursor
         
@@ -342,16 +342,16 @@ class Visualizer:
             if key in (curses.KEY_ENTER, 10): # Enter key
                 try:
                     amount = int(current_input)
-                    if amount >= min_raise_to:
+                    if amount >= min_raise:
                         self.stdscr.nodelay(True) # Exit blocking mode
                         curses.curs_set(0) # Hide cursor
                         return amount
                     else:
-                        self.addstr(prompt_y, prompt_x, f"Raise must be at least {min_raise_to}", wait=0.5)
-                        current_input = str(min_raise_to) # Reset to minimum
+                        self.addstr(prompt_y, prompt_x, RED + f"Raise must be at least £{min_raise:.2f}" + END, wait=1)
+                        current_input = str(min_raise) # Reset to minimum
                 except ValueError:
-                    self.addstr(prompt_y, prompt_x, "Invalid amount. Please enter a number.", wait = 0.5)
-                    current_input = str(min_raise_to) # Reset to minimum
+                    self.addstr(prompt_y, prompt_x, RED + "Invalid amount. Please enter a number." + END, wait = 1)
+                    current_input = str(min_raise) # Reset to minimum
 
             elif key in (curses.KEY_BACKSPACE, 127): # Backspace
                 if len(current_input) > 0:
@@ -371,14 +371,36 @@ class Visualizer:
 
 
     # NEW: Main function to get human action
-    def get_human_action(self, player, to_call):
+    def get_human_action(self, player, to_call, min_raise):
         """
         Pauses the game, draws the action options, and waits for key input.
         """
+        prompt_y, prompt_x = UIConfig.BETTING_ROW - 1, player.x
+
+        show_cards = self.get_entered_input(
+                y=prompt_y, 
+                x=prompt_x, 
+                prompt_text="Would you like to see your cards?", 
+                default_value='',
+                allowed_input=['Y', 'N']
+            )
+        
+        if show_cards=='Y':
+            self.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.max_x_table )
+            self.addstr(player.y, player.x,  player.player_info(show = True))
+            done = self.get_entered_input(
+                y=prompt_y, 
+                x=prompt_x, 
+                prompt_text="Done? [Enter]", 
+                default_value='',
+            )
+            self.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.max_x_table )
+            self.addstr(player.y, player.x,  player.player_info(show = False))
+
         self.stdscr.nodelay(False) # Enter blocking mode
         curses.curs_set(1) # Show cursor
         
-        prompt_y, prompt_x = UIConfig.BETTING_ROW - 1, player.x
+
         
         # 1. Determine action names based on to_call
         if to_call == 0:
@@ -444,7 +466,7 @@ class Visualizer:
                     
                 elif current_input == 'R' and can_raise:
                     # 4. Handle Raise input (using helper function for numerical input)
-                    amount = self._get_raise_amount(player)
+                    amount = self._get_raise_amount(player, min_raise)
                     action = 'raise'
                     # Check if the raise amount is within stack limit
                     if amount == 'CANCEL':

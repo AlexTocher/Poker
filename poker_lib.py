@@ -20,6 +20,7 @@ class Game:
     def __init__(self, players = [], buyin = 100, sb = 2, stdscr = None):
         self.sb = sb # small blind
         self.bb = 2*sb # big blind
+        self.min_raise = self.sb
         self.minimum_bet = 0
         self.n_rounds = 0
         self.table = Table() # class to store info about what's on the table
@@ -284,6 +285,7 @@ class Game:
         if raise_blinds: 
             self.sb += raise_blinds
             self.bb = 2 * self.sb
+            self.min_raise = self.sb
         
         if redraw: self.redraw()
          # Ensure total contribution is reset for all players
@@ -367,10 +369,29 @@ class Game:
             n_winners = len(winners_of_pot)
 
             if n_winners > 0:
-                winnings = pot.amount / n_winners
+                
+                # Calculate integer winnings and remainder
+                winnings_base = pot.amount // n_winners
+                remainder = pot.amount % n_winners
+                
+                # Randomly determine who gets the remainder
+                winners_for_remainder = winners_of_pot[:]
+                random.shuffle(winners_for_remainder)
+                
+                # Distribute base winnings and the remainder
                 for p in winners_of_pot:
+                    # All winners get the base integer amount
+                    winnings = winnings_base 
+                    
+                    # Check if this player is one of the lucky ones to get +1
+                    if p in winners_for_remainder[:remainder]:
+                        winnings += 1
+                    
                     p.stack += winnings
-                    ftr = f"{p.name} wins £{winnings:.2f} from Pot {i+1}".ljust(5 * CARD_WIDTH + 4, ' ')
+                    
+                    # Formatting the message with the exact winning amount (which is now an integer)
+                    ftr = f"{p.name} wins £{winnings} from Pot {i+1}".ljust(5 * CARD_WIDTH + 4, ' ')
+                    
                     if not self.visualizer: 
                         print(ftr)
                     else: 
@@ -378,9 +399,13 @@ class Game:
                         self.visualizer.addstr(p.y, p.x, p.player_info(show_cards = False))
                         lines = self.winner_info(p).split('\n')
                         self.visualizer.addstr(self.table.y + 2, self.table.x, '\n'.join(lines[:-2] + [ftr + lines[-2][4 + 5 * CARD_WIDTH:]] + [lines[-1]]) , SHOW_HANDS_DELAY)
+                
                 remaining_pot_amount -= pot.amount
+                
             else:
                 if not self.visualizer: print(f"Pot {i+1} (£{pot.amount:.2f}) had no eligible winners and remains unclaimed.")
+
+# ... (rest of the class)
                 
         
         # 3. Show Final Hands and Stacks
@@ -417,7 +442,7 @@ class Game:
         hdr = 'BETTING'.center(UIConfig.BETTING_WIDTH, '-')
         body = ''
         if sum([p.total_contribution for p in self.players]) != 0:
-            hdr += '\n\n' + f'Minimum bet: £{self.minimum_bet:.2f}'.ljust(UIConfig.BETTING_WIDTH)
+            hdr += '\n\n' + f'Minimum bet'.rjust(UIConfig.MAX_PLAYER_NAME_LENGTH)  + ': ' + f' £{self.minimum_bet:.2f}'.ljust(UIConfig.BETTING_WIDTH)
             for p in sorted(self.players, key = lambda p : p.idx):
                 if p.is_out: continue
                 body += f'{p.name}'.rjust(UIConfig.MAX_PLAYER_NAME_LENGTH) + ': ' + f' £{p.total_contribution:.2f}' 
@@ -503,7 +528,7 @@ class Game:
         if self.table.total_pot_amount == 0: # Pre-Flop
             hdr = self.players[0].name +  f' is the dealer'
             if self.visualizer:
-                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)   
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW,  self.visualizer.max_x_table )   
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 0 ])
                 self.visualizer.addstr(self.players[0].y, self.players[0].x,  self.players[0].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -513,7 +538,7 @@ class Game:
             hdr = self.players[1].name + f' is the small blind'
             self.players[1].raise_bet(self.sb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW,  self.visualizer.max_x_table )
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 1 ])
                 self.visualizer.addstr(self.players[1].y, self.players[1].x,  self.players[1].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -524,7 +549,7 @@ class Game:
             hdr = self.players[2].name + f' is the big blind'
             self.players[2].raise_bet(self.bb, self.minimum_bet, verbose = False)
             if self.visualizer:
-                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x)
+                self.visualizer.clear_area(UIConfig.BETTING_ROW, 0, UIConfig.BETTING_ROW, self.visualizer.max_x_table )
                 self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != 2 ])
                 self.visualizer.addstr(self.players[2].y, self.players[2].x,  self.players[2].player_info(hdr))
                 self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -575,7 +600,7 @@ class Game:
 
             if player_obj.folded:
                 if self.visualizer:
-                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x_table )
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -595,7 +620,7 @@ class Game:
                 player_obj.last_raised = True
                 
                 if self.visualizer:
-                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x_table )
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -604,7 +629,7 @@ class Game:
                 # Player called or checked
                 all_called_checked += 1 
                 if self.visualizer: 
-                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
+                    self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x_table )
                     self.visualizer.addstrs([(p.y, p.x, p.player_info()) for i, p in enumerate(self.players) if i != idx % len(self.players) ])
                     self.visualizer.addstr(self.players[idx % len(self.players)].y, self.players[idx % len(self.players)].x,  self.players[idx % len(self.players)].player_info(hdr))
                     self.visualizer.addstr(self.table.bety, self.table.betx,  self.betting_info(), BETTING_DELAY)
@@ -619,7 +644,7 @@ class Game:
             for i, pot in enumerate(self.table.pots):
                 print(f"Pot {i+1}: {pot}")
         else:
-            self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x)
+            self.visualizer.clear_area(UIConfig.BETTING_ROW, 0,UIConfig.BETTING_ROW, self.visualizer.max_x_table )
             self.visualizer.addstr(self.table.poty, self.table.potx, self.table.pot_info())
             self.visualizer.addstr(self.table.bety, self.table.betx, self.betting_info(), BETTING_DELAY)
 
@@ -719,7 +744,7 @@ class Player:
         to_call = game.minimum_bet - self.total_contribution
 
         if self.is_human:
-            if game.visualizer: return game.visualizer.get_human_action(self, to_call)
+            if game.visualizer: return game.visualizer.get_human_action(self, to_call, game.min_raise)
             else:
                 while True:
                     choice = input('Call/Check (C), Fold (F), or Raise (R)? >> ')
@@ -731,7 +756,11 @@ class Player:
                     elif choice == 'F':
                         return 'fold', 0
                     elif choice == 'R':
-                        amount = input('Amount to raise: £')
+                        while True:
+                            amount = input(f'Amount to raise (min £{game.raise_min}): £')
+                            if amount >= game.min_raise: break
+                            else: print('Invalid: raise too small')
+                            if amount > self.stack: amount = self.stack
                         return 'raise', float(amount)
                     print('Please enter a valid choice')
             
@@ -811,7 +840,7 @@ class Player:
         if verbose: print(out_str )
         return out, out_str
     
-    def player_info(self, betting_str = '', show_cards = True, show = False, height = 12):
+    def player_info(self, betting_str = '', show_cards = True, show = False, height = 13):
         hdr = self.name 
         if not self.is_human: hdr += ' (AI)'
         hdr += '\n'
